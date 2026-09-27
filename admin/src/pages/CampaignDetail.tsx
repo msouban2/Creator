@@ -560,7 +560,7 @@ export default function CampaignDetail() {
             <thead className="border-b border-slate-100 bg-slate-50/60">
               <tr>
                 <Th>#</Th><Th>Order Date</Th><Th>Delivery Date</Th><Th>Creator</Th><Th>Product / ASIN</Th><Th>Order ID</Th><Th>Order Amount</Th>
-                <Th>Order Screenshot</Th><Th>Review Screenshot</Th><Th>Review Recording</Th><Th>Seller Feedback</Th>
+                <Th>Order Screenshot</Th><Th>Review Recording</Th><Th>Seller Feedback</Th>
                 <Th>Payout Amount</Th><Th>Added to Wallet</Th><Th>Payment Screenshot</Th><Th>Status</Th>
               </tr>
             </thead>
@@ -590,7 +590,6 @@ export default function CampaignDetail() {
                       <Td>{a.order_id ?? "-"}</Td>
                       <Td>{formatCurrency(a.purchase_amount ?? campaign.reward_amount)}</Td>
                       <Td><div><LinkCell bucket="purchase-orders" path={a.purchase_proof} /><div><Pill state={orderShotState(a)} /></div></div></Td>
-                      <Td><div><LinkCell bucket="submission-screenshots" path={sub?.screenshots?.[0]} /><div><Pill state={sub?.screenshots?.length ? reviewState(a) : "none"} /></div></div></Td>
                       <Td><div><LinkCell bucket="submission-videos" path={sub?.video_url} /><div><Pill state={sub?.video_url ? reviewState(a) : "none"} /></div></div></Td>
                       <Td><div><LinkCell bucket="submission-videos" path={sub?.seller_feedback_video} /><div><Pill state={sellerFb ? "approved" : "none"} /></div></div></Td>
                       <Td>{a.payout_amount ? formatCurrency(a.payout_amount) : "-"}</Td>

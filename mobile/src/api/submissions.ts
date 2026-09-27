@@ -79,6 +79,22 @@ export function useSubmitContent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: SubmissionInput) => {
+      const { data: application, error: appErr } = await supabase
+        .from("applications")
+        .select("id, expected_delivery_at, campaign:campaigns!campaign_id(id, campaign_type)")
+        .eq("id", input.applicationId)
+        .maybeSingle();
+
+      if (appErr) throw appErr;
+      const campaignType = (application?.campaign as { campaign_type?: string } | null)?.campaign_type;
+      const expectedDeliveryAt = application?.expected_delivery_at ?? null;
+      if (campaignType === "reimbursement" && expectedDeliveryAt) {
+        const deliveryDate = new Date(expectedDeliveryAt).getTime();
+        if (Date.now() < deliveryDate) {
+          throw new Error(`Submission is locked until ${new Date(expectedDeliveryAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.`);
+        }
+      }
+
       const record = {
         application_id: input.applicationId,
         reel_url: input.reel_url,

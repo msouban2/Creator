@@ -134,6 +134,9 @@ export default function ApplicationReview() {
 
   const [orderId, setOrderId] = useState("");
   const [orderAmount, setOrderAmount] = useState("");
+  const [orderDate, setOrderDate] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [cashbackAmount, setCashbackAmount] = useState("");
   const [sellerFeedback, setSellerFeedback] = useState("");
   const [sellerId, setSellerId] = useState("");
   const [reviewDays, setReviewDays] = useState("");
@@ -149,6 +152,9 @@ export default function ApplicationReview() {
         ? String(app.submissions[0].order_amount)
         : ""
     );
+    setOrderDate(app.order_date ?? "");
+    setDeliveryDate(app.expected_delivery_at ?? "");
+    setCashbackAmount(app.payout_amount != null ? String(app.payout_amount) : "");
     setSellerFeedback(app.seller_feedback ?? "");
     setSellerId(app.campaign?.seller_id ?? "");
     // Prefill the timer from the campaign fallback (stored as fractional hours),
@@ -181,9 +187,13 @@ export default function ApplicationReview() {
   const saveDetails = useMutation({
     mutationFn: async () => {
       const parsedAmount = orderAmount.trim() === "" ? null : Number(orderAmount);
+      const parsedCashback = cashbackAmount.trim() === "" ? null : Number(cashbackAmount);
       const patch = {
         order_id: orderId.trim() || null,
         purchase_amount: parsedAmount,
+        order_date: orderDate.trim() || null,
+        expected_delivery_at: deliveryDate.trim() || null,
+        payout_amount: parsedCashback,
         seller_feedback: sellerFeedback.trim() || null,
       };
       const { error } = await supabase.from("applications").update(patch).eq("id", id);
@@ -306,6 +316,8 @@ export default function ApplicationReview() {
   const creator = app.creator;
   const hasPurchase = !!app.purchase_proof;
   const hasReview = screenshots.length > 0;
+  const isReimbursement = c?.campaign_type === "reimbursement";
+  const submissionOpen = !isReimbursement || !deliveryDate || new Date(deliveryDate).getTime() <= Date.now();
   const canDecide = hasPurchase && hasReview;
   const deadline = reviewDeadline(app);
   const totalReviewMinutes =
@@ -374,7 +386,11 @@ export default function ApplicationReview() {
           <Card>
             <CardContent className="p-4">
               <p className="mb-2 text-sm font-semibold text-ink">Review screenshot(s)</p>
-              {hasReview ? (
+              {isReimbursement && !submissionOpen ? (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  Submission upload opens after the delivery date. Review uploads stay blocked until then.
+                </p>
+              ) : hasReview ? (
                 <div className="grid grid-cols-2 gap-3">
                   {(reviewUrls ?? []).map((url, i) => (
                     <button key={i} onClick={() => setPreview(url)}>
@@ -419,13 +435,16 @@ export default function ApplicationReview() {
             <CardContent className="p-4">
               <p className="mb-1 text-sm font-semibold text-ink">Campaign &amp; product</p>
               <div className="divide-y divide-slate-100">
+                <Detail icon={Package} label="Product name">{c?.product_name ?? "—"}</Detail>
                 <Detail icon={Package} label="Brand">{c?.brand_name ?? "—"}</Detail>
-                <Detail icon={Package} label="Product">{c?.product_name ?? "—"}</Detail>
-                <Detail icon={Hash} label="Expected ASIN">
+                {c?.platform ? (
+                  <Detail icon={Package} label="Platform">{c.platform}</Detail>
+                ) : null}
+                <Detail icon={Hash} label="ASIN">
                   {c?.asin ? <span className="font-mono">{c.asin}</span> : "—"}
                 </Detail>
                 {c?.product_url ? (
-                  <Detail icon={ExternalLink} label="Product link">
+                  <Detail icon={ExternalLink} label="Link">
                     <a
                       href={c.product_url}
                       target="_blank"
@@ -442,31 +461,85 @@ export default function ApplicationReview() {
 
           <Card>
             <CardContent className="p-4">
-              <p className="mb-1 text-sm font-semibold text-ink">Purchase &amp; timing</p>
-              <div className="divide-y divide-slate-100">
-                <div className="py-2">
-                  <Label>Order amount</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={orderAmount}
-                    onChange={(e) => setOrderAmount(e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <Detail icon={Calendar} label="Product received">
-                  {app.product_received_at ? formatDate(app.product_received_at) : "—"}
-                </Detail>
-                <Detail icon={Calendar} label="Review submitted">
-                  {app.submissions?.[0]?.created_at ? formatDate(app.submissions[0].created_at) : "—"}
-                </Detail>
-                <Detail icon={Clock} label="Review upload deadline">
-                  {deadline ? formatDate(deadline.toISOString()) : "—"}
-                  {c?.review_upload_hours ? (
-                    <span className="ml-1 text-xs text-slate-400">({c.review_upload_hours}h window)</span>
-                  ) : null}
-                </Detail>
+              <p className="mb-1 text-sm font-semibold text-ink">Order details</p>
+              <div className="space-y-3">
+                {isReimbursement ? (
+                  <>
+                    <div>
+                      <Label>Order ID</Label>
+                      <Input value={orderId} onChange={(e) => setOrderId(e.target.value)} placeholder="e.g. ORD-1024" />
+                    </div>
+                    <div>
+                      <Label>Order Amount</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={orderAmount}
+                        onChange={(e) => setOrderAmount(e.target.value)}
+                        placeholder="500"
+                      />
+                    </div>
+                    <div>
+                      <Label>Order placed date</Label>
+                      <Input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Delivery date</Label>
+                      <Input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+                    </div>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      {deliveryDate
+                        ? `Submission upload stays locked until ${new Date(deliveryDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric"})}. After that, the creator can upload the review.`
+                        : "Set the delivery date to unlock the upload window for the creator."}
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Deliverables</p>
+                      <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                        <li>• Submission recording</li>
+                        <li>• SFB</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <Label>Cashback amount</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={cashbackAmount}
+                        onChange={(e) => setCashbackAmount(e.target.value)}
+                        placeholder="450"
+                      />
+                      <p className="mt-1 text-xs text-slate-400">This amount is added to the creator wallet.</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    <div className="py-2">
+                      <Label>Order amount</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={orderAmount}
+                        onChange={(e) => setOrderAmount(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                    <Detail icon={Calendar} label="Product received">
+                      {app.product_received_at ? formatDate(app.product_received_at) : "—"}
+                    </Detail>
+                    <Detail icon={Calendar} label="Review submitted">
+                      {app.submissions?.[0]?.created_at ? formatDate(app.submissions[0].created_at) : "—"}
+                    </Detail>
+                    <Detail icon={Clock} label="Review upload deadline">
+                      {deadline ? formatDate(deadline.toISOString()) : "—"}
+                      {c?.review_upload_hours ? (
+                        <span className="ml-1 text-xs text-slate-400">({c.review_upload_hours}h window)</span>
+                      ) : null}
+                    </Detail>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -16,6 +16,8 @@ export default function SubmitScreen() {
   const insets = useSafeAreaInsets();
   const { data: app } = useApplication(id!);
   const isReimbursement = app?.campaign?.campaign_type === "reimbursement";
+  const submissionLocked = isReimbursement && !!app?.expected_delivery_at && new Date(app.expected_delivery_at).getTime() > Date.now();
+  const submissionLockDate = isReimbursement && app?.expected_delivery_at ? new Date(app.expected_delivery_at) : null;
   const [reel, setReel] = useState("");
   const [post, setPost] = useState("");
   const [story, setStory] = useState("");
@@ -66,6 +68,10 @@ export default function SubmitScreen() {
   };
 
   const onSubmit = async () => {
+    if (submissionLocked) {
+      Alert.alert("Review uploads are locked", `You can submit after ${submissionLockDate?.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.`);
+      return;
+    }
     if (isReimbursement) {
       if (images.length === 0) {
         Alert.alert("Add screenshots", "Please upload at least one screenshot of your product review / order.");
@@ -121,6 +127,11 @@ export default function SubmitScreen() {
             <Text className="mt-1 text-xs text-ink-soft">
               Upload a screenshot of your product review (and order, if you haven't already). No reel needed — our team will verify it and send your reimbursement to your wallet.
             </Text>
+            {submissionLocked && submissionLockDate ? (
+              <Text className="mt-2 text-xs font-semibold text-amber-700">
+                Review uploads are locked until {submissionLockDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.
+              </Text>
+            ) : null}
           </View>
         ) : (
           <>
@@ -253,7 +264,14 @@ export default function SubmitScreen() {
           )}
         </View>
 
-        <Button label={isReimbursement ? "Submit for Reimbursement" : "Submit for Review"} onPress={onSubmit} loading={loading} variant="dark" fullWidth />
+        <Button
+          label={submissionLocked ? "Uploads Locked" : isReimbursement ? "Submit for Reimbursement" : "Submit for Review"}
+          onPress={onSubmit}
+          loading={loading}
+          variant="dark"
+          fullWidth
+          disabled={submissionLocked || loading}
+        />
       </View>
     </ScrollView>
   );

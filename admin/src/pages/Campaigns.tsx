@@ -133,6 +133,15 @@ function campaignBudget(c: Campaign): number {
   return c.budget != null && Number(c.budget) > 0 ? Number(c.budget) : computedBudget(c);
 }
 
+function parsePaidPayoutRange(input: string): number {
+  const raw = input.trim();
+  if (!raw) return 0;
+  const range = raw.match(/^\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*$/);
+  if (range) return Number(range[2]);
+  const single = Number(raw);
+  return Number.isFinite(single) ? single : 0;
+}
+
 type FormState = Partial<Campaign> & { campaign_type: CampaignType };
 
 const EMPTY: FormState = {
@@ -350,6 +359,7 @@ export default function Campaigns() {
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [paidPayoutInput, setPaidPayoutInput] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // True when the platform is a custom value (not one of the presets).
@@ -376,6 +386,7 @@ export default function Campaigns() {
 
   const openCreate = () => {
     setForm(EMPTY);
+    setPaidPayoutInput("");
     setPlatformOther(false);
     setError(null);
     setOpen(true);
@@ -386,6 +397,7 @@ export default function Campaigns() {
       application_deadline: c.application_deadline?.slice(0, 16) ?? "",
       campaign_deadline: c.campaign_deadline?.slice(0, 16) ?? "",
     });
+    setPaidPayoutInput(c.campaign_type === "paid" ? String(c.reward_amount ?? "") : "");
     setPlatformOther(Boolean(c.platform && !PLATFORMS.includes(c.platform)));
     setError(null);
     setOpen(true);
@@ -932,23 +944,19 @@ export default function Campaigns() {
                   <Label>Payout Range (₹)</Label>
                   <Input
                     type="text"
-                    value={
-                      form.reward_amount != null && Number(form.reward_amount) > 0
-                        ? String(form.reward_amount)
-                        : ""
-                    }
+                    value={paidPayoutInput}
                     onChange={(e) => {
-                      const v = e.target.value.trim();
-                      if (!v) {
-                        set("reward_amount", null);
+                      const v = e.target.value;
+                      setPaidPayoutInput(v);
+                      if (!v.trim()) {
+                        set("reward_amount", 0);
                         return;
                       }
-                      const parsed = Number(v);
-                      set("reward_amount", Number.isFinite(parsed) ? parsed : 0);
+                      set("reward_amount", parsePaidPayoutRange(v));
                     }}
-                    placeholder="1000-5000"
+                    placeholder="3000-5000"
                   />
-                  <p className="mt-1 text-xs text-slate-400">Enter a simple range like 1000-5000.</p>
+                  <p className="mt-1 text-xs text-slate-400">Enter a simple range like 3000-5000.</p>
                 </div>
                 <div>
                   <Label>Min Followers</Label>
