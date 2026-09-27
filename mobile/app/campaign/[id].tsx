@@ -409,18 +409,14 @@ export default function CampaignDetailsScreen() {
           {tab === "dos" ? (
             <TabCard>
               <Text className="mb-3 text-base font-bold text-ink">Do&apos;s &amp; Dont&apos;s</Text>
-              {campaign.instructions ? (
-                <Text className="text-sm leading-6 text-ink-soft">{campaign.instructions}</Text>
-              ) : (
-                <View>
-                  <BulletLine text="Write an ORIGINAL review sharing why you liked the product and what worked for you ✅" />
-                  <BulletLine text="You may HIGHLIGHT the product's key features or your experience ✅" />
-                  <BulletLine text="Keep a screenshot of 'Review Submitted Successfully' once you submit the review ✅" />
-                  <BulletLine text="One-liners or reviews WITHOUT a Verified Purchase tag will not be approved ❌" />
-                  <BulletLine text="DO NOT copy-paste the product description or replicate content from other live reviews ❌" />
-                  <BulletLine text="Please REFRAIN from using the brand name or competitor brand names ❌" />
-                </View>
-              )}
+              <View>
+                <BulletLine text="Write an ORIGINAL review sharing why you liked the product and what worked for you ✅" />
+                <BulletLine text="You may HIGHLIGHT the product's key features or your experience ✅" />
+                <BulletLine text="Keep a screenshot of 'Review Submitted Successfully' once you submit the review ✅" />
+                <BulletLine text="One-liners or reviews WITHOUT a Verified Purchase tag will not be approved ❌" />
+                <BulletLine text="DO NOT copy-paste the product description or replicate content from other live reviews ❌" />
+                <BulletLine text="Please REFRAIN from using the brand name or competitor brand names ❌" />
+              </View>
             </TabCard>
           ) : null}
         </View>

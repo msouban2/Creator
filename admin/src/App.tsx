@@ -13,7 +13,6 @@ import Dashboard from "@/pages/Dashboard";
 import Campaigns from "@/pages/Campaigns";
 import CampaignDetail from "@/pages/CampaignDetail";
 import Applications from "@/pages/Applications";
-import Submissions from "@/pages/Submissions";
 import Payments from "@/pages/Payments";
 import Sellers from "@/pages/Sellers";
 import Referrals from "@/pages/Referrals";
@@ -112,7 +111,7 @@ export default function App() {
           element={can("applications") ? <ApplicationReview /> : <Navigate to={homePath} replace />}
         />
         <Route path="/users" element={can("users") ? <Users /> : <Navigate to={homePath} replace />} />
-        <Route path="/submissions" element={can("submissions") ? <Submissions /> : <Navigate to={homePath} replace />} />
+        <Route path="/submissions" element={<Navigate to="/applications" replace />} />
         <Route path="/review-queue" element={can("review_queue") ? <ReviewQueue /> : <Navigate to={homePath} replace />} />
         <Route
           path="/instagram-requests"

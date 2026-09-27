@@ -1,10 +1,10 @@
 import { useMemo, useState, useEffect, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, ChevronRight, ChevronDown, Search, RefreshCw, FileText, Gift, Database } from "lucide-react";
+import { ClipboardList, ChevronRight, ChevronDown, Search, RefreshCw, FileText, Gift, Database, IndianRupee } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/store/auth";
-import type { Application, ApplicationStatus, CampaignType } from "@/lib/types";
+import type { Application, ApplicationStatus, CampaignType, CampaignSubmission, ReviewStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge, Modal } from "@/components/ui/badge";
 import { Select, Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { ReviewNotesThread } from "@/components/ReviewNotesThread";
 import { TurnPill, StageTracker } from "@/components/WorkflowUi";
 import { statusLabel, isCampaignClosed } from "@/lib/workflow";
 import { formatCurrency, formatDate, orderRef } from "@/lib/utils";
+import { ReleasePaymentModal, SendBackModal, REVIEW_TAGS } from "./Submissions";
 
 const ALL_TYPES: CampaignType[] = ["barter", "reimbursement", "paid"];
 const TYPE_LABEL: Record<CampaignType, string> = {
@@ -695,6 +696,167 @@ export default function Applications() {
   );
 }
 
+// Inline content-review actions (moved here from the old Submissions page):
+// approve / request revision / reject, send back to the reviewing employee,
+// tag the submission, and release the creator's payment.
+function SubmissionReviewPanel({ app }: { app: Application }) {
+  const qc = useQueryClient();
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === "admin";
+  const sub = app.submissions?.[0];
+  const [showPay, setShowPay] = useState(false);
+  const [showSendBack, setShowSendBack] = useState(false);
+
+  const logEvent = async (message: string) => {
+    try {
+      await supabase.rpc("log_review_event", { p_application: app.id, p_submission: sub?.id ?? null, p_message: message });
+    } catch {
+      /* ignore logging errors */
+    }
+  };
+
+  const review = useMutation({
+    mutationFn: async (status: ReviewStatus) => {
+      if (!sub) return;
+      const { error } = await supabase
+        .from("campaign_submissions")
+        .update({ review_status: status, reviewed_by: profile?.id, reviewed_at: new Date().toISOString() })
+        .eq("id", sub.id);
+      if (error) throw error;
+      const appStatus = status === "approved" ? "review" : status === "revision" ? "content_creation" : "rejected";
+      const { error: appErr } = await supabase.from("applications").update({ status: appStatus }).eq("id", app.id);
+      if (appErr) throw appErr;
+      await logEvent(status === "approved" ? "Approved submission" : status === "revision" ? "Requested revision" : "Rejected submission");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["applications"] });
+      qc.invalidateQueries({ queryKey: ["review-stats"] });
+      qc.invalidateQueries({ queryKey: ["reviewer-workload"] });
+    },
+  });
+
+  const tag = useMutation({
+    mutationFn: async (review_tag: string | null) => {
+      if (!sub) return;
+      const { error } = await supabase.from("campaign_submissions").update({ review_tag }).eq("id", sub.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["applications"] }),
+  });
+
+  const sendBack = useMutation({
+    mutationFn: async ({ review_tag, review_note }: { review_tag: string | null; review_note: string | null }) => {
+      if (!sub) return;
+      const { error } = await supabase
+        .from("campaign_submissions")
+        .update({ review_status: "pending", review_tag, review_note, claimed_by: null, claimed_at: null })
+        .eq("id", sub.id);
+      if (error) throw error;
+      const { error: appErr } = await supabase.from("applications").update({ status: "submitted" }).eq("id", app.id);
+      if (appErr) throw appErr;
+      if (review_note && review_note.trim()) {
+        await supabase.from("review_notes").insert({
+          application_id: app.id,
+          submission_id: sub.id,
+          author_id: profile?.id,
+          note: `Sent back for re-review${review_tag ? ` (${review_tag})` : ""}: ${review_note.trim()}`,
+        });
+      }
+    },
+    onSuccess: () => {
+      setShowSendBack(false);
+      qc.invalidateQueries({ queryKey: ["applications"] });
+      qc.invalidateQueries({ queryKey: ["review-stats"] });
+      qc.invalidateQueries({ queryKey: ["review-notes"] });
+    },
+  });
+
+  if (!sub) return null;
+
+  const subWithApp = { ...sub, application: app } as CampaignSubmission;
+  const paid = app.status === "completed";
+
+  return (
+    <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <ClipboardList size={13} /> Content review
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {sub.review_status === "pending" && (
+          <>
+            <Button variant="success" size="sm" onClick={() => review.mutate("approved")} disabled={review.isPending}>Approve</Button>
+            <Button variant="outline" size="sm" onClick={() => review.mutate("revision")} disabled={review.isPending}>Revision</Button>
+            <Button variant="danger" size="sm" onClick={() => review.mutate("rejected")} disabled={review.isPending}>Reject</Button>
+            {isAdmin && (
+              <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setShowSendBack(true)}>↩ Send back</Button>
+            )}
+          </>
+        )}
+        {sub.review_status === "approved" && isAdmin && (
+          paid ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600"><IndianRupee size={12} /> Paid</span>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setShowSendBack(true)}>↩ Send back to review</Button>
+              <Button size="sm" onClick={() => setShowPay(true)}><IndianRupee size={14} /> Release Payment</Button>
+            </>
+          )
+        )}
+        {sub.review_status !== "pending" && (
+          <Badge variant={sub.review_status === "approved" ? "success" : sub.review_status === "rejected" ? "danger" : "info"}>{sub.review_status}</Badge>
+        )}
+      </div>
+
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Status tag</p>
+        <div className="flex flex-wrap gap-2">
+          {REVIEW_TAGS.map((t) => {
+            const active = sub.review_tag === t.value;
+            return (
+              <button
+                key={t.value}
+                onClick={() => tag.mutate(active ? null : t.value)}
+                className={
+                  active
+                    ? t.variant === "success"
+                      ? "rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white"
+                      : t.variant === "danger"
+                      ? "rounded-full bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white"
+                      : "rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white"
+                    : "rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                }
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {showPay && (
+        <ReleasePaymentModal
+          submission={subWithApp}
+          onClose={() => setShowPay(false)}
+          onDone={() => {
+            setShowPay(false);
+            qc.invalidateQueries({ queryKey: ["applications"] });
+            qc.invalidateQueries({ queryKey: ["review-stats"] });
+          }}
+        />
+      )}
+      {showSendBack && (
+        <SendBackModal
+          submission={subWithApp}
+          pending={sendBack.isPending}
+          onClose={() => setShowSendBack(false)}
+          onConfirm={(review_tag, review_note) => sendBack.mutate({ review_tag, review_note })}
+        />
+      )}
+    </div>
+  );
+}
+
 function AppDetail({ app: a }: { app: Application }) {
   const na = nextAction(a);
   return (
@@ -740,6 +902,7 @@ function AppDetail({ app: a }: { app: Application }) {
       <PaidFlowInfo app={a} />
       <SubmittedContent app={a} />
       <SentBackBanner app={a} />
+      <SubmissionReviewPanel app={a} />
       <div className="pt-1">
         <CreatorInsights creator={a.creator} />
       </div>

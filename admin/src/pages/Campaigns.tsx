@@ -40,6 +40,8 @@ function effectiveStatus(c: Campaign): string {
 }
 
 const CATEGORIES = ["Fashion", "Beauty", "Food", "Tech", "Fitness", "Travel", "Lifestyle", "Gaming"];
+// Preset shopping platforms; staff can also type a custom one via "Other".
+const PLATFORMS = ["Amazon", "Flipkart", "Nykaa", "Purplle", "Ajio", "Website", "Google"];
 
 async function fetchCampaigns() {
   const { data, error } = await supabase
@@ -148,11 +150,15 @@ const EMPTY: FormState = {
   reward_amount: 0,
   cashback_percentage: 0,
   budget: null,
+  cashback_budget: null,
+  commission_budget: null,
+  referral_amount: null,
   application_deadline: "",
   campaign_deadline: "",
   product_url: "",
   product_name: "",
   asin: "",
+  platform: "",
   review_upload_hours: null,
   sample_video_url: "",
   sample_screenshots: [],
@@ -346,6 +352,8 @@ export default function Campaigns() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True when the platform is a custom value (not one of the presets).
+  const [platformOther, setPlatformOther] = useState(false);
 
   const isEdit = Boolean(form.id);
 
@@ -368,6 +376,7 @@ export default function Campaigns() {
 
   const openCreate = () => {
     setForm(EMPTY);
+    setPlatformOther(false);
     setError(null);
     setOpen(true);
   };
@@ -377,6 +386,7 @@ export default function Campaigns() {
       application_deadline: c.application_deadline?.slice(0, 16) ?? "",
       campaign_deadline: c.campaign_deadline?.slice(0, 16) ?? "",
     });
+    setPlatformOther(Boolean(c.platform && !PLATFORMS.includes(c.platform)));
     setError(null);
     setOpen(true);
   };
@@ -442,6 +452,9 @@ export default function Campaigns() {
         cashback_percentage:
           payload.campaign_type === "reimbursement" ? 0 : Number(payload.cashback_percentage) || 0,
         budget: payload.budget != null && String(payload.budget) !== "" ? Number(payload.budget) : null,
+        cashback_budget: payload.cashback_budget != null && String(payload.cashback_budget) !== "" ? Number(payload.cashback_budget) : null,
+        commission_budget: payload.commission_budget != null && String(payload.commission_budget) !== "" ? Number(payload.commission_budget) : null,
+        referral_amount: payload.referral_amount != null && String(payload.referral_amount) !== "" ? Number(payload.referral_amount) : null,
         campaign_deadline: payload.campaign_deadline
           ? new Date(payload.campaign_deadline).toISOString()
           : null,
@@ -451,6 +464,7 @@ export default function Campaigns() {
         // product link is only used for reimbursement (creator buys it)
         product_url: payload.campaign_type === "reimbursement" ? payload.product_url || null : null,
         product_name: payload.product_name || null,
+        platform: payload.platform?.trim() || null,
         // expected ASIN — used across types so staff can match the purchased product
         asin: payload.asin?.trim() || null,
         review_upload_hours:
@@ -663,7 +677,7 @@ export default function Campaigns() {
                   <p className="mt-0.5 text-xs text-slate-500">
                     {c.campaign_type === "reimbursement" ? (
                       <>
-                        {platformFromUrl(c.product_url) ? <>Platform: <span className="text-slate-600">{platformFromUrl(c.product_url)}</span> · </> : null}
+                        {(c.platform || platformFromUrl(c.product_url)) ? <>Platform: <span className="text-slate-600">{c.platform || platformFromUrl(c.product_url)}</span> · </> : null}
                         Brand: <span className="text-slate-600">{c.brand_name || "—"}</span>
                         {c.asin ? <> · ASIN: <span className="font-mono text-slate-600">{c.asin}</span></> : null}
                       </>
@@ -754,333 +768,387 @@ export default function Campaigns() {
               </p>
             </div>
           )}
-          {/* Campaign type selector */}
-          <div>
-            <Label>Campaign Type</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["reimbursement", "barter", "paid"] as CampaignType[]).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => set("campaign_type", t)}
-                  className={
-                    "rounded-xl border px-3 py-2 text-sm font-semibold transition-colors " +
-                    (form.campaign_type === t
-                      ? "border-primary bg-primary text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")
-                  }
+          {/* ─── Section 1 · Posting Campaign ─────────────────────────── */}
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-primary">Posting Campaign</h3>
+
+            {/* Campaign type selector */}
+            <div>
+              <Label>Campaign Type</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["reimbursement", "barter", "paid"] as CampaignType[]).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => set("campaign_type", t)}
+                    className={
+                      "rounded-xl border px-3 py-2 text-sm font-semibold transition-colors " +
+                      (form.campaign_type === t
+                        ? "border-primary bg-primary text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")
+                    }
+                  >
+                    {TYPE_LABEL[t]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Campaign Title</Label>
+                <Input value={form.title ?? ""} onChange={(e) => set("title", e.target.value)} placeholder="Summer Glow Collab" />
+              </div>
+              <div>
+                <Label>Brand Name</Label>
+                <Input value={form.brand_name ?? ""} onChange={(e) => set("brand_name", e.target.value)} placeholder="Nykaa" />
+              </div>
+            </div>
+
+            {form.campaign_type === "reimbursement" && (
+              <div>
+                <Label>Platform</Label>
+                <Select
+                  value={platformOther ? "__other__" : (form.platform ?? "")}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "__other__") {
+                      setPlatformOther(true);
+                      set("platform", "");
+                    } else {
+                      setPlatformOther(false);
+                      set("platform", v);
+                    }
+                  }}
                 >
-                  {TYPE_LABEL[t]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Campaign Title</Label>
-              <Input value={form.title ?? ""} onChange={(e) => set("title", e.target.value)} placeholder="Summer Glow Collab" />
-            </div>
-            <div>
-              <Label>Brand Name</Label>
-              <Input value={form.brand_name ?? ""} onChange={(e) => set("brand_name", e.target.value)} placeholder="Nykaa" />
-            </div>
-          </div>
-
-          <div>
-            <Label>Campaign Code (optional)</Label>
-            <Input value={form.campaign_code ?? ""} onChange={(e) => set("campaign_code", e.target.value)} placeholder="e.g. BR2025-014 — auto-generated if left blank" />
-          </div>
-
-          {/* Image upload */}
-          <div>
-            <Label>Campaign Image</Label>
-            <div className="flex items-center gap-3">
-              <div className="h-16 w-24 overflow-hidden rounded-xl bg-slate-100">
-                {form.campaign_image ? (
-                  <img src={form.campaign_image} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-slate-300">
-                    <ImagePlus size={20} />
-                  </div>
+                  <option value="">Select platform…</option>
+                  {PLATFORMS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                  <option value="__other__">Other (type below)…</option>
+                </Select>
+                {platformOther && (
+                  <Input
+                    className="mt-2"
+                    value={form.platform ?? ""}
+                    onChange={(e) => set("platform", e.target.value)}
+                    placeholder="Type platform name (e.g. Snapdeal, Meesho…)"
+                  />
                 )}
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
-                {uploading ? <Loader2 size={16} className="animate-spin" /> : <ImagePlus size={16} />}
-                {uploading ? "Uploading…" : "Upload image"}
-                <input type="file" accept="image/*" className="hidden" onChange={onImage} />
-              </label>
-            </div>
-          </div>
+            )}
 
-          <div className="grid grid-cols-2 gap-3">
+            {/* Image upload */}
             <div>
-              <Label>Category</Label>
-              <Select value={form.category ?? ""} onChange={(e) => set("category", e.target.value)}>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+              <Label>Campaign Image</Label>
+              <div className="flex items-center gap-3">
+                <div className="h-16 w-24 overflow-hidden rounded-xl bg-slate-100">
+                  {form.campaign_image ? (
+                    <img src={form.campaign_image} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-slate-300">
+                      <ImagePlus size={20} />
+                    </div>
+                  )}
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
+                  {uploading ? <Loader2 size={16} className="animate-spin" /> : <ImagePlus size={16} />}
+                  {uploading ? "Uploading…" : "Upload image"}
+                  <input type="file" accept="image/*" className="hidden" onChange={onImage} />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Category</Label>
+                <Select value={form.category ?? ""} onChange={(e) => set("category", e.target.value)}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Slots (creators needed)</Label>
+                <Input type="number" min={1} value={form.slots ?? 1} onChange={(e) => set("slots", Number(e.target.value))} />
+              </div>
+            </div>
+
+            {form.campaign_type === "reimbursement" && (
+              <div>
+                <Label>Product Purchase Link</Label>
+                <Input
+                  type="url"
+                  value={form.product_url ?? ""}
+                  onChange={(e) => set("product_url", e.target.value)}
+                  placeholder="https://brand.com/product/123"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Selected creators open this to buy the product, then upload their order proof.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Product ASIN</Label>
+                    <Input
+                      value={form.asin ?? ""}
+                      onChange={(e) => set("asin", e.target.value)}
+                      placeholder="B0XXXXXXX"
+                    />
+                    <p className="mt-1 text-xs text-slate-400">
+                      Staff compare the purchase video against this ASIN.
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Product Price (₹)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.reward_amount ?? 0}
+                      onChange={(e) => set("reward_amount", Number(e.target.value))}
+                      placeholder="Amount the creator pays and gets refunded"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {form.campaign_type === "barter" && (
+              <div className="grid grid-cols-2 gap-3 rounded-xl bg-amber-50/60 p-3">
+                <div>
+                  <Label>Product Worth (₹)</Label>
+                  <Input type="number" min={0} value={form.reward_amount ?? 0} onChange={(e) => set("reward_amount", Number(e.target.value))} placeholder="Value of free product" />
+                </div>
+                <div>
+                  <Label>Minimum Followers</Label>
+                  <Input type="number" min={0} value={form.min_followers ?? 500} onChange={(e) => set("min_followers", Number(e.target.value))} />
+                </div>
+                <p className="col-span-2 text-xs text-slate-400">Brand ships this product to the creator's address (collected in-app).</p>
+              </div>
+            )}
+
+            {form.campaign_type === "paid" && (
+              <div className="grid grid-cols-2 gap-3 rounded-xl bg-emerald-50/60 p-3">
+                <div className="col-span-2">
+                  <Label>Payout Range (₹)</Label>
+                  <Input
+                    type="text"
+                    value={
+                      form.reward_amount != null && Number(form.reward_amount) > 0
+                        ? String(form.reward_amount)
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      if (!v) {
+                        set("reward_amount", null);
+                        return;
+                      }
+                      const parsed = Number(v);
+                      set("reward_amount", Number.isFinite(parsed) ? parsed : 0);
+                    }}
+                    placeholder="1000-5000"
+                  />
+                  <p className="mt-1 text-xs text-slate-400">Enter a simple range like 1000-5000.</p>
+                </div>
+                <div>
+                  <Label>Min Followers</Label>
+                  <Input type="number" min={0} value={form.min_followers ?? 0} onChange={(e) => set("min_followers", Number(e.target.value))} />
+                </div>
+                <div>
+                  <Label>Max Followers</Label>
+                  <Input type="number" min={0} value={form.max_followers ?? ""} onChange={(e) => set("max_followers", e.target.value ? Number(e.target.value) : null)} placeholder="Optional" />
+                </div>
+                <p className="col-span-2 text-xs text-slate-400">Product is shipped to the creator's address. Creator uploads a draft video for approval before posting.</p>
+              </div>
+            )}
+
+            {form.campaign_type !== "reimbursement" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Apply Before</Label>
+                  <Input type="datetime-local" value={form.application_deadline ?? ""} onChange={(e) => set("application_deadline", e.target.value)} />
+                  <p className="mt-1 text-xs text-slate-400">When applications close (drives the creator's “Applications close in” countdown).</p>
+                </div>
+                <div>
+                  <Label>Campaign Deadline</Label>
+                  <Input type="datetime-local" value={form.campaign_deadline ?? ""} onChange={(e) => set("campaign_deadline", e.target.value)} />
+                  <p className="mt-1 text-xs text-slate-400">The overall campaign end date shown to creators.</p>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <Label>Status</Label>
+              <Select value={form.status ?? "draft"} onChange={(e) => set("status", e.target.value as Campaign["status"])}>
+                <option value="draft">Draft (hidden)</option>
+                <option value="active">Active (live to creators)</option>
+                <option value="closed">Closed</option>
               </Select>
             </div>
+
             <div>
-              <Label>Slots (creators needed)</Label>
-              <Input type="number" min={1} value={form.slots ?? 1} onChange={(e) => set("slots", Number(e.target.value))} />
+              <Label>Brand (owner)</Label>
+              <Select value={form.seller_id ?? ""} onChange={(e) => set("seller_id", e.target.value || null)}>
+                <option value="">No brand assigned</option>
+                {sellers?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name || s.email || s.id}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1 text-xs text-slate-400">
+                The assigned brand can see this campaign's creators and their engagement in their Performance view.
+              </p>
+            </div>
+
+            <div>
+              <Label>Brand Name (internal)</Label>
+              <Input
+                value={form.seller_name ?? ""}
+                onChange={(e) => set("seller_name", e.target.value)}
+                placeholder="e.g. Acme Retail Pvt Ltd"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Shown to the assigned brand only. Never displayed to creators.
+              </p>
             </div>
           </div>
 
-          <div>
-            <Label>Campaign Budget (₹)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={form.budget ?? ""}
-              onChange={(e) => set("budget", e.target.value === "" ? null : Number(e.target.value))}
-              placeholder="Total amount allocated for this campaign"
-            />
-            {(() => {
-              const slots = Number(form.slots) || 0;
-              const est =
-                form.campaign_type === "reimbursement"
-                  ? (Number(form.reward_amount) + Number(form.cashback_percentage)) * slots
-                  : Number(form.reward_amount) * slots;
-              return (
-                <p className="mt-1 text-xs text-slate-400">
-                  Estimated from slots × reward: <b className="text-slate-500">{formatCurrency(est)}</b>. Leave blank to
-                  use this estimate. Spend (order refunds / payouts + referral bonuses) is tracked against this budget.
-                </p>
-              );
-            })()}
+          {/* ─── Section 2 · Deliverables ─────────────────────────────── */}
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-primary">Deliverables</h3>
+
+            <div>
+              <Label>Description</Label>
+              <Textarea value={form.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="What is this campaign about?" />
+            </div>
+            <div>
+              <Label>Deliverables</Label>
+              <Textarea value={form.deliverables ?? ""} onChange={(e) => set("deliverables", e.target.value)} placeholder="1 Reel + 2 Stories" />
+            </div>
+            <div>
+              <Label>Instructions</Label>
+              <Textarea value={form.instructions ?? ""} onChange={(e) => set("instructions", e.target.value)} placeholder="Tag @brand, use #hashtag…" />
+            </div>
+
+            {/* Sample content shown to creators (all types) */}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+              <p className="mb-2 text-sm font-semibold text-ink">Sample content (shown to creators)</p>
+              <div>
+                <Label>Sample / Reference Video URL</Label>
+                <Input type="url" value={form.sample_video_url ?? ""} onChange={(e) => set("sample_video_url", e.target.value)} placeholder="https://… a reference reel creators can watch" />
+              </div>
+              <div className="mt-3">
+                <Label>Sample screenshots</Label>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {(form.sample_screenshots ?? []).map((url, i) => (
+                    <div key={url + i} className="relative">
+                      <img src={url} alt="" className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200" />
+                      <button
+                        type="button"
+                        onClick={() => set("sample_screenshots", (form.sample_screenshots ?? []).filter((_, j) => j !== i))}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-300 text-2xl text-slate-400 hover:border-primary hover:text-primary">
+                    +
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={onSampleImages} />
+                  </label>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">Add example screenshots so creators know what content to make.</p>
+              </div>
+            </div>
           </div>
 
-          {/* Type-specific fields */}
-          {form.campaign_type === "reimbursement" && (
-            <div className="grid grid-cols-2 gap-3 rounded-xl bg-indigo-50/60 p-3">
-              <div className="col-span-2">
-                <Label>Product Price (₹)</Label>
+          {/* ─── Section 3 · Finance ──────────────────────────────────── */}
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-primary">Finance</h3>
+
+            <div>
+              <Label>Brand Budget (₹)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.budget ?? ""}
+                onChange={(e) => set("budget", e.target.value === "" ? null : Number(e.target.value))}
+                placeholder="Total amount allocated for this campaign"
+              />
+              {(() => {
+                const slots = Number(form.slots) || 0;
+                const est =
+                  form.campaign_type === "reimbursement"
+                    ? (Number(form.reward_amount) + Number(form.cashback_percentage)) * slots
+                    : Number(form.reward_amount) * slots;
+                return (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Estimated from slots × reward: <b className="text-slate-500">{formatCurrency(est)}</b>. Leave blank to
+                    use this estimate. Spend (order refunds / payouts + referral bonuses) is tracked against this budget.
+                  </p>
+                );
+              })()}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {form.campaign_type === "reimbursement" && (
+                <div>
+                  <Label>Cashback Budget (₹)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.cashback_budget ?? ""}
+                    onChange={(e) => set("cashback_budget", e.target.value === "" ? null : Number(e.target.value))}
+                    placeholder="0"
+                  />
+                </div>
+              )}
+              <div>
+                <Label>Commission Budget (₹)</Label>
                 <Input
                   type="number"
                   min={0}
-                  value={form.reward_amount ?? 0}
-                  onChange={(e) => set("reward_amount", Number(e.target.value))}
-                  placeholder="Amount the creator pays and gets refunded"
+                  value={form.commission_budget ?? ""}
+                  onChange={(e) => set("commission_budget", e.target.value === "" ? null : Number(e.target.value))}
+                  placeholder="0"
                 />
               </div>
-              <p className="col-span-2 text-xs font-semibold text-indigo-700">
-                Creator earns {formatCurrency(Number(form.reward_amount) || 0)} total
-                <span className="font-normal text-slate-400"> (product price refunded — no additional amount)</span>
-              </p>
-              <p className="col-span-2 text-xs text-slate-400">No follower requirement — anyone can apply.</p>
-            </div>
-          )}
-
-          {form.campaign_type === "barter" && (
-            <div className="grid grid-cols-2 gap-3 rounded-xl bg-amber-50/60 p-3">
               <div>
-                <Label>Product Worth (₹)</Label>
-                <Input type="number" min={0} value={form.reward_amount ?? 0} onChange={(e) => set("reward_amount", Number(e.target.value))} placeholder="Value of free product" />
+                <Label>Referral Amount (₹)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.referral_amount ?? ""}
+                  onChange={(e) => set("referral_amount", e.target.value === "" ? null : Number(e.target.value))}
+                  placeholder="0"
+                />
               </div>
               <div>
-                <Label>Minimum Followers</Label>
-                <Input type="number" min={0} value={form.min_followers ?? 500} onChange={(e) => set("min_followers", Number(e.target.value))} />
-              </div>
-              <div className="col-span-2">
-                <Label>Product Name</Label>
-                <Input value={form.product_name ?? ""} onChange={(e) => set("product_name", e.target.value)} placeholder="e.g. Matte Lipstick Set" />
-              </div>
-              <div className="col-span-2">
-                <Label>Product ASIN</Label>
-                <Input value={form.asin ?? ""} onChange={(e) => set("asin", e.target.value)} placeholder="B0XXXXXXX" />
-                <p className="mt-1 text-xs text-slate-400">Staff compare the purchase video against this ASIN.</p>
-              </div>
-              <p className="col-span-2 text-xs text-slate-400">Brand ships this product to the creator's address (collected in-app).</p>
-            </div>
-          )}
-
-          {form.campaign_type === "paid" && (
-            <div className="grid grid-cols-2 gap-3 rounded-xl bg-emerald-50/60 p-3">
-              <div>
-                <Label>Payout Up To (₹)</Label>
-                <Input type="number" min={0} value={form.reward_amount ?? 0} onChange={(e) => set("reward_amount", Number(e.target.value))} />
-              </div>
-              <div>
-                <Label>Product Name</Label>
-                <Input value={form.product_name ?? ""} onChange={(e) => set("product_name", e.target.value)} placeholder="What product is sent?" />
-              </div>
-              <div>
-                <Label>Min Followers</Label>
-                <Input type="number" min={0} value={form.min_followers ?? 0} onChange={(e) => set("min_followers", Number(e.target.value))} />
-              </div>
-              <div>
-                <Label>Max Followers</Label>
-                <Input type="number" min={0} value={form.max_followers ?? ""} onChange={(e) => set("max_followers", e.target.value ? Number(e.target.value) : null)} placeholder="Optional" />
-              </div>
-              <div className="col-span-2">
-                <Label>Product ASIN</Label>
-                <Input value={form.asin ?? ""} onChange={(e) => set("asin", e.target.value)} placeholder="B0XXXXXXX" />
-                <p className="mt-1 text-xs text-slate-400">Staff compare the purchase video against this ASIN.</p>
-              </div>
-              <p className="col-span-2 text-xs text-slate-400">Product is shipped to the creator's address. Creator uploads a draft video for approval before posting.</p>
-            </div>
-          )}
-
-          <div>
-            <Label>Description</Label>
-            <Textarea value={form.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="What is this campaign about?" />
-          </div>
-          <div>
-            <Label>Deliverables</Label>
-            <Textarea value={form.deliverables ?? ""} onChange={(e) => set("deliverables", e.target.value)} placeholder="1 Reel + 2 Stories" />
-          </div>
-          <div>
-            <Label>Instructions</Label>
-            <Textarea value={form.instructions ?? ""} onChange={(e) => set("instructions", e.target.value)} placeholder="Tag @brand, use #hashtag…" />
-          </div>
-
-          {/* Sample content shown to creators (all types) */}
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
-            <p className="mb-2 text-sm font-semibold text-ink">Sample content (shown to creators)</p>
-            <div>
-              <Label>Sample / Reference Video URL</Label>
-              <Input type="url" value={form.sample_video_url ?? ""} onChange={(e) => set("sample_video_url", e.target.value)} placeholder="https://… a reference reel creators can watch" />
-            </div>
-            <div className="mt-3">
-              <Label>Sample screenshots</Label>
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {(form.sample_screenshots ?? []).map((url, i) => (
-                  <div key={url + i} className="relative">
-                    <img src={url} alt="" className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200" />
-                    <button
-                      type="button"
-                      onClick={() => set("sample_screenshots", (form.sample_screenshots ?? []).filter((_, j) => j !== i))}
-                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-300 text-2xl text-slate-400 hover:border-primary hover:text-primary">
-                  +
-                  <input type="file" accept="image/*" multiple className="hidden" onChange={onSampleImages} />
-                </label>
-              </div>
-              <p className="mt-1 text-xs text-slate-400">Add example screenshots so creators know what content to make.</p>
-            </div>
-          </div>
-
-          {form.campaign_type === "reimbursement" && (
-            <div>
-              <Label>Product Purchase Link</Label>
-              <Input
-                type="url"
-                value={form.product_url ?? ""}
-                onChange={(e) => set("product_url", e.target.value)}
-                placeholder="https://brand.com/product/123"
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                Selected creators open this to buy the product, then upload their order proof.
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Product ASIN</Label>
-                  <Input
-                    value={form.asin ?? ""}
-                    onChange={(e) => set("asin", e.target.value)}
-                    placeholder="B0XXXXXXX"
-                  />
-                  <p className="mt-1 text-xs text-slate-400">
-                    Staff compare the purchase video against this ASIN.
-                  </p>
-                </div>
-                <div>
-                  <Label>Review upload timer</Label>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={form.review_upload_hours != null ? Math.floor(form.review_upload_hours) : ""}
-                        onChange={(e) => {
-                          const h = e.target.value === "" ? 0 : Math.max(0, Math.floor(Number(e.target.value)));
-                          const curM = form.review_upload_hours != null ? Math.round((form.review_upload_hours % 1) * 60) : 0;
-                          const total = h + curM / 60;
-                          set("review_upload_hours", total > 0 ? total : null);
-                        }}
-                        placeholder="Hours"
-                      />
-                      <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Hours</p>
-                    </div>
-                    <div className="flex-1">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={59}
-                        value={form.review_upload_hours != null ? Math.round((form.review_upload_hours % 1) * 60) : ""}
-                        onChange={(e) => {
-                          const m = e.target.value === "" ? 0 : Math.min(59, Math.max(0, Math.floor(Number(e.target.value))));
-                          const curH = form.review_upload_hours != null ? Math.floor(form.review_upload_hours) : 0;
-                          const total = curH + m / 60;
-                          set("review_upload_hours", total > 0 ? total : null);
-                        }}
-                        placeholder="Minutes"
-                      />
-                      <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Minutes</p>
-                    </div>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-400">
-                    How long the creator gets to upload the review screenshot after the order is approved.
-                  </p>
-                </div>
+                <Label>Total Referral Amount (₹)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={
+                    Number(form.referral_amount ?? 0) * (Number(form.slots) || 0)
+                  }
+                  readOnly
+                  className="bg-slate-50"
+                />
               </div>
             </div>
-          )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Apply Before</Label>
-              <Input type="datetime-local" value={form.application_deadline ?? ""} onChange={(e) => set("application_deadline", e.target.value)} />
-              <p className="mt-1 text-xs text-slate-400">When applications close (drives the creator's “Applications close in” countdown).</p>
-            </div>
-            <div>
-              <Label>Campaign Deadline</Label>
-              <Input type="datetime-local" value={form.campaign_deadline ?? ""} onChange={(e) => set("campaign_deadline", e.target.value)} />
-              <p className="mt-1 text-xs text-slate-400">The overall campaign end date shown to creators.</p>
-            </div>
-          </div>
+            {/* Type-specific fields */}
+            {form.campaign_type === "reimbursement" && (
+              <div className="rounded-xl bg-indigo-50/60 p-3">
+                <p className="text-xs font-semibold text-indigo-700">
+                  Creator earns {formatCurrency(Number(form.reward_amount) || 0)} total
+                  <span className="font-normal text-slate-400"> (product price refunded — no additional amount)</span>
+                </p>
+                <p className="mt-1 text-xs text-slate-400">No follower requirement — anyone can apply.</p>
+              </div>
+            )}
 
-          <div>
-            <Label>Status</Label>
-            <Select value={form.status ?? "draft"} onChange={(e) => set("status", e.target.value as Campaign["status"])}>
-              <option value="draft">Draft (hidden)</option>
-              <option value="active">Active (live to creators)</option>
-              <option value="closed">Closed</option>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Brand (owner)</Label>
-            <Select value={form.seller_id ?? ""} onChange={(e) => set("seller_id", e.target.value || null)}>
-              <option value="">No brand assigned</option>
-              {sellers?.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name || s.email || s.id}
-                </option>
-              ))}
-            </Select>
-            <p className="mt-1 text-xs text-slate-400">
-              The assigned brand can see this campaign's creators and their engagement in their Performance view.
-            </p>
-          </div>
-
-          <div>
-            <Label>Brand Name (internal)</Label>
-            <Input
-              value={form.seller_name ?? ""}
-              onChange={(e) => set("seller_name", e.target.value)}
-              placeholder="e.g. Acme Retail Pvt Ltd"
-            />
-            <p className="mt-1 text-xs text-slate-400">
-              Shown to the assigned brand only. Never displayed to creators.
-            </p>
           </div>
 
           {error ? <p className="text-sm font-medium text-rose-600">{error}</p> : null}

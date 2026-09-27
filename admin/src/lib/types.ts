@@ -79,11 +79,15 @@ export interface Campaign {
   reward_amount: number;
   cashback_percentage: number;
   budget?: number | null;
+  cashback_budget?: number | null;
+  commission_budget?: number | null;
+  referral_amount?: number | null;
   application_deadline: string | null;
   campaign_deadline: string | null;
   product_url: string | null;
   product_name: string | null;
   asin: string | null;
+  platform: string | null;
   review_upload_hours: number | null;
   sample_video_url: string | null;
   sample_screenshots?: string[] | null;

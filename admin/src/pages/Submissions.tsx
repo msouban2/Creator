@@ -20,7 +20,7 @@ const REVIEW_VARIANT: Record<ReviewStatus, "warning" | "success" | "danger" | "i
   revision: "info",
 };
 
-const REVIEW_TAGS: { value: string; label: string; variant: "success" | "danger" | "warning" }[] = [
+export const REVIEW_TAGS: { value: string; label: string; variant: "success" | "danger" | "warning" }[] = [
   { value: "correct", label: "Correct", variant: "success" },
   { value: "blocked", label: "Blocked", variant: "danger" },
   { value: "wrong_seller_feedback", label: "Wrong Brand Feedback", variant: "warning" },
@@ -38,7 +38,7 @@ const TYPE_VARIANT: Record<CampaignType, "warning" | "info" | "success"> = {
   paid: "success",
 };
 
-type ReviewStat = {
+export type ReviewStat = {
   campaign_type: string;
   pending: number;
   approved: number;
@@ -46,7 +46,7 @@ type ReviewStat = {
   revision: number;
   total: number;
 };
-type Workload = {
+export type Workload = {
   reviewer_id: string;
   reviewer_name: string | null;
   review_types: string[] | null;
@@ -66,13 +66,13 @@ async function fetchSubmissions(filter: string) {
   return data as CampaignSubmission[];
 }
 
-async function fetchReviewStats() {
+export async function fetchReviewStats() {
   const { data, error } = await supabase.rpc("review_stats");
   if (error) throw error;
   return (data ?? []) as ReviewStat[];
 }
 
-async function fetchWorkload() {
+export async function fetchWorkload() {
   const { data, error } = await supabase.rpc("reviewer_workload");
   if (error) throw error;
   return (data ?? []) as Workload[];
@@ -370,7 +370,7 @@ export default function Submissions() {
   );
 }
 
-function AdminOverview({
+export function AdminOverview({
   stats,
   workload,
   active,
@@ -789,7 +789,7 @@ function SubmissionRow({
   );
 }
 
-function SendBackModal({
+export function SendBackModal({
   submission,
   pending,
   onClose,
@@ -874,7 +874,7 @@ function SendBackModal({
   );
 }
 
-function ReleasePaymentModal({
+export function ReleasePaymentModal({
   submission,
   onClose,
   onDone,

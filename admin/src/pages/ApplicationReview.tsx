@@ -12,10 +12,11 @@ import {
   Hash,
   Clock,
   Instagram,
+  IndianRupee,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { signedUrl, signedUrls } from "@/lib/storage";
-import type { Application } from "@/lib/types";
+import type { Application, CampaignSubmission } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { CreatorInsights } from "@/components/CreatorInsights";
 import { ReviewNotesThread } from "@/components/ReviewNotesThread";
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, Modal } from "@/components/ui/badge";
 import { Input, Textarea, Label, Select } from "@/components/ui/input";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { ReleasePaymentModal } from "./Submissions";
 
 async function fetchApplication(id: string) {
   const { data, error } = await supabase
@@ -128,8 +130,10 @@ export default function ApplicationReview() {
   const [preview, setPreview] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const [paying, setPaying] = useState(false);
 
   const [orderId, setOrderId] = useState("");
+  const [orderAmount, setOrderAmount] = useState("");
   const [sellerFeedback, setSellerFeedback] = useState("");
   const [sellerId, setSellerId] = useState("");
   const [reviewDays, setReviewDays] = useState("");
@@ -138,6 +142,13 @@ export default function ApplicationReview() {
   const [detailsLoaded, setDetailsLoaded] = useState(false);
   if (app && !detailsLoaded) {
     setOrderId(app.order_id ?? "");
+    setOrderAmount(
+      app.purchase_amount != null
+        ? String(app.purchase_amount)
+        : app.submissions?.[0]?.order_amount != null
+        ? String(app.submissions[0].order_amount)
+        : ""
+    );
     setSellerFeedback(app.seller_feedback ?? "");
     setSellerId(app.campaign?.seller_id ?? "");
     // Prefill the timer from the campaign fallback (stored as fractional hours),
@@ -157,14 +168,33 @@ export default function ApplicationReview() {
 
   const { data: sellers } = useQuery({ queryKey: ["sellers-for-review"], queryFn: fetchSellers });
 
+  // Write a system entry to the application's audit timeline (records the acting
+  // staff member + what they did, so admins can see who accepted/rejected whom).
+  const logEvent = async (message: string) => {
+    try {
+      await supabase.rpc("log_review_event", { p_application: id, p_submission: null, p_message: message });
+    } catch {
+      /* ignore logging errors */
+    }
+  };
+
   const saveDetails = useMutation({
     mutationFn: async () => {
+      const parsedAmount = orderAmount.trim() === "" ? null : Number(orderAmount);
       const patch = {
         order_id: orderId.trim() || null,
+        purchase_amount: parsedAmount,
         seller_feedback: sellerFeedback.trim() || null,
       };
       const { error } = await supabase.from("applications").update(patch).eq("id", id);
       if (error) throw error;
+      if (app?.submissions?.[0]?.id) {
+        const { error: subErr } = await supabase
+          .from("campaign_submissions")
+          .update({ order_amount: parsedAmount })
+          .eq("id", app.submissions[0].id);
+        if (subErr) throw subErr;
+      }
       // Assign / change the seller on the parent campaign so the order becomes
       // visible to that seller (visibility is campaign-level).
       if (app?.campaign_id && (sellerId || null) !== (app.campaign?.seller_id ?? null)) {
@@ -196,6 +226,7 @@ export default function ApplicationReview() {
         : { status: "rejected", reject_reason };
       const { error } = await supabase.from("applications").update(patch).eq("id", id);
       if (error) throw error;
+      await logEvent(approve ? "Approved order" : `Rejected order${reject_reason ? ` — ${reject_reason}` : ""}`);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["applications"] });
@@ -228,11 +259,38 @@ export default function ApplicationReview() {
           });
         }
       }
+      await logEvent(status === "review" ? "Approved review" : `Rejected applicant${reject_reason ? ` — ${reject_reason}` : ""}`);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["applications"] });
       qc.invalidateQueries({ queryKey: ["application-review", id] });
       navigate(backTo);
+    },
+  });
+
+  // Simple forward transitions for the barter/paid workflow (and reimbursement
+  // order steps). Stays on the page so the next step's buttons appear.
+  const advance = useMutation({
+    mutationFn: async ({ status }: { status: string }) => {
+      const now = new Date().toISOString();
+      const patch: Record<string, unknown> = { status };
+      if (status === "selected") patch.selected_at = now;
+      if (status === "product_shipped") patch.shipped_at = now;
+      if (status === "draft_approved") patch.draft_feedback = null;
+      const { error } = await supabase.from("applications").update(patch).eq("id", id);
+      if (error) throw error;
+      const label: Record<string, string> = {
+        selected: "Selected applicant",
+        product_shipped: "Marked shipped",
+        delivered: "Marked delivered",
+        draft_approved: "Approved draft video",
+        draft_revision: "Requested draft correction",
+      };
+      await logEvent(label[status] ?? `Status changed to ${status.replace(/_/g, " ")}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["application-review", id] });
+      qc.invalidateQueries({ queryKey: ["applications"] });
     },
   });
 
@@ -386,13 +444,17 @@ export default function ApplicationReview() {
             <CardContent className="p-4">
               <p className="mb-1 text-sm font-semibold text-ink">Purchase &amp; timing</p>
               <div className="divide-y divide-slate-100">
-                <Detail icon={CheckCircle2} label="Order amount">
-                  {app.submissions?.[0]?.order_amount != null
-                    ? formatCurrency(app.submissions[0].order_amount)
-                    : app.purchase_amount
-                    ? formatCurrency(app.purchase_amount)
-                    : "—"}
-                </Detail>
+                <div className="py-2">
+                  <Label>Order amount</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={orderAmount}
+                    onChange={(e) => setOrderAmount(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
                 <Detail icon={Calendar} label="Product received">
                   {app.product_received_at ? formatDate(app.product_received_at) : "—"}
                 </Detail>
@@ -485,99 +547,11 @@ export default function ApplicationReview() {
 
           {readonly ? (
             <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-              Cross-check view. Release the payment from the Submissions page.
+              Cross-check view — actions are disabled.
             </div>
           ) : app.status === "completed" ? (
             <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
               ✓ Approved &amp; paid.
-            </div>
-          ) : app.status === "ordered" ? (
-            <div className="space-y-2">
-              {app.order_submitted_at && (() => {
-                const deadline = new Date(app.order_submitted_at).getTime() + 24 * 3600 * 1000;
-                const overdue = Date.now() > deadline;
-                return (
-                  <p className={`rounded-lg px-3 py-2 text-sm font-medium ${overdue ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-600"}`}>
-                    ⏱ Submitted {formatDate(app.order_submitted_at)} · {overdue ? "approval overdue — please review now" : `approve by ${formatDate(new Date(deadline).toISOString())}`}
-                  </p>
-                );
-              })()}
-              {!hasPurchase && (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  Waiting on the creator's order screenshot.
-                </p>
-              )}
-              <div>
-                <Label>Review upload timer</Label>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      min={0}
-                      value={reviewDays}
-                      onChange={(e) => setReviewDays(e.target.value)}
-                      placeholder="Days"
-                    />
-                    <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Days</p>
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={reviewHours}
-                      onChange={(e) => setReviewHours(e.target.value)}
-                      placeholder="Hours"
-                    />
-                    <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Hours</p>
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={59}
-                      value={reviewMinutes}
-                      onChange={(e) => setReviewMinutes(e.target.value)}
-                      placeholder="Minutes"
-                    />
-                    <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Minutes</p>
-                  </div>
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  {totalReviewMinutes > 0
-                    ? `Creator must upload their review by ${formatDate(
-                        new Date(Date.now() + totalReviewMinutes * 60 * 1000).toISOString(),
-                      )}.`
-                    : "Leave blank to fall back to the campaign deadline."}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1"
-                  disabled={!hasPurchase || orderApproval.isPending}
-                  onClick={() =>
-                    orderApproval.mutate({
-                      approve: true,
-                      minutes: totalReviewMinutes > 0 ? totalReviewMinutes : undefined,
-                    })
-                  }
-                >
-                  {orderApproval.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                  Approve Order
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50"
-                  disabled={!hasPurchase || orderApproval.isPending}
-                  onClick={() => setRejecting(true)}
-                >
-                  <XCircle size={16} /> Reject
-                </Button>
-              </div>
-            </div>
-          ) : app.status === "review" ? (
-            <div className="rounded-xl bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">
-              ✓ Reviewed — cross-check &amp; release payment on the Submissions page.
             </div>
           ) : app.status === "rejected" ? (
             <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
@@ -592,30 +566,154 @@ export default function ApplicationReview() {
               ) : null}
             </div>
           ) : (
-            <div className="space-y-2">
-              {!canDecide && (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  Both the purchase and review screenshots are required before you can submit or reject.
-                </p>
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-bold text-ink">Next step</p>
+
+              {/* Applied → select or reject (all types) */}
+              {app.status === "applied" && (
+                <div className="flex gap-2">
+                  <Button className="flex-1" disabled={advance.isPending} onClick={() => advance.mutate({ status: "selected" })}>
+                    {advance.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Select applicant
+                  </Button>
+                  <Button variant="outline" className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setRejecting(true)}>
+                    <XCircle size={16} /> Reject
+                  </Button>
+                </div>
               )}
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1"
-                  disabled={!canDecide || update.isPending}
-                  onClick={() => update.mutate({ status: "review" })}
-                >
-                  {update.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                  Submit for approval
+
+              {/* Selected → ship (barter/paid) or wait (reimbursement) */}
+              {app.status === "selected" && (c?.campaign_type === "barter" || c?.campaign_type === "paid") && (
+                <Button className="w-full" disabled={advance.isPending} onClick={() => advance.mutate({ status: "product_shipped" })}>
+                  {advance.isPending ? <Loader2 size={16} className="animate-spin" /> : <Package size={16} />} Mark Shipped
                 </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50"
-                  disabled={!canDecide || update.isPending}
-                  onClick={() => setRejecting(true)}
-                >
-                  <XCircle size={16} /> Reject
+              )}
+              {app.status === "selected" && c?.campaign_type === "reimbursement" && (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">Waiting for the creator to buy the product &amp; upload the order screenshot.</p>
+              )}
+
+              {/* Shipped → delivered */}
+              {app.status === "product_shipped" && (
+                <Button className="w-full" disabled={advance.isPending} onClick={() => advance.mutate({ status: "delivered" })}>
+                  {advance.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Mark Delivered
                 </Button>
-              </div>
+              )}
+
+              {/* Delivered / posting → waiting on creator */}
+              {(app.status === "delivered" || app.status === "content_creation") && (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">Creator is creating &amp; posting the content.</p>
+              )}
+
+              {/* Paid draft → approve or request correction */}
+              {app.status === "draft_submitted" && (
+                <div className="flex gap-2">
+                  <Button className="flex-1" disabled={advance.isPending} onClick={() => advance.mutate({ status: "draft_approved" })}>
+                    <CheckCircle2 size={16} /> Approve Draft
+                  </Button>
+                  <Button variant="outline" className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50" disabled={advance.isPending} onClick={() => advance.mutate({ status: "draft_revision" })}>
+                    Request Correction
+                  </Button>
+                </div>
+              )}
+              {(app.status === "draft_revision" || app.status === "draft_approved" || app.status === "posted") && (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">Creator is posting the reel &amp; will submit the link.</p>
+              )}
+
+              {/* Paid live link → verify & pay */}
+              {app.status === "link_submitted" && (
+                <div className="space-y-2">
+                  {app.reel_link ? (
+                    <a href={app.reel_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline">
+                      Open submitted reel <ExternalLink size={12} />
+                    </a>
+                  ) : (
+                    <p className="text-sm text-amber-600">No reel link submitted yet.</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button className="flex-1" disabled={!app.reel_link} onClick={() => setPaying(true)}>
+                      <IndianRupee size={16} /> Approve &amp; Pay
+                    </Button>
+                    <Button variant="outline" className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setRejecting(true)}>
+                      <XCircle size={16} /> Reject
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Reimbursement order → approve (with review timer) or reject */}
+              {app.status === "ordered" && (
+                <div className="space-y-2">
+                  {app.order_submitted_at && (() => {
+                    const deadline = new Date(app.order_submitted_at).getTime() + 24 * 3600 * 1000;
+                    const overdue = Date.now() > deadline;
+                    return (
+                      <p className={`rounded-lg px-3 py-2 text-sm font-medium ${overdue ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-600"}`}>
+                        ⏱ Submitted {formatDate(app.order_submitted_at)} · {overdue ? "approval overdue — please review now" : `approve by ${formatDate(new Date(deadline).toISOString())}`}
+                      </p>
+                    );
+                  })()}
+                  {!hasPurchase && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">Waiting on the creator's order screenshot.</p>
+                  )}
+                  <div>
+                    <Label>Review upload timer</Label>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <Input type="number" min={0} value={reviewDays} onChange={(e) => setReviewDays(e.target.value)} placeholder="Days" />
+                        <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Days</p>
+                      </div>
+                      <div className="flex-1">
+                        <Input type="number" min={0} max={23} value={reviewHours} onChange={(e) => setReviewHours(e.target.value)} placeholder="Hours" />
+                        <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Hours</p>
+                      </div>
+                      <div className="flex-1">
+                        <Input type="number" min={0} max={59} value={reviewMinutes} onChange={(e) => setReviewMinutes(e.target.value)} placeholder="Minutes" />
+                        <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Minutes</p>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {totalReviewMinutes > 0
+                        ? `Creator must upload their review by ${formatDate(new Date(Date.now() + totalReviewMinutes * 60 * 1000).toISOString())}.`
+                        : "Leave blank to fall back to the campaign deadline."}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button className="flex-1" disabled={!hasPurchase || orderApproval.isPending} onClick={() => orderApproval.mutate({ approve: true, minutes: totalReviewMinutes > 0 ? totalReviewMinutes : undefined })}>
+                      {orderApproval.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Approve Order
+                    </Button>
+                    <Button variant="outline" className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50" disabled={!hasPurchase || orderApproval.isPending} onClick={() => setRejecting(true)}>
+                      <XCircle size={16} /> Reject
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Content review + payment (submitted / review) */}
+              {(app.status === "submitted" || app.status === "review") && (
+                c?.campaign_type === "reimbursement" && app.status === "submitted" ? (
+                  <div className="space-y-2">
+                    {!canDecide && (
+                      <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">Both the purchase and review screenshots are required before you can approve or reject.</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button className="flex-1" disabled={!canDecide || update.isPending} onClick={() => update.mutate({ status: "review" })}>
+                        {update.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Approve review
+                      </Button>
+                      <Button variant="outline" className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50" disabled={!canDecide || update.isPending} onClick={() => setRejecting(true)}>
+                        <XCircle size={16} /> Reject
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button className="flex-1" onClick={() => setPaying(true)}>
+                      <IndianRupee size={16} /> Approve &amp; Pay
+                    </Button>
+                    <Button variant="outline" className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setRejecting(true)}>
+                      <XCircle size={16} /> Reject
+                    </Button>
+                  </div>
+                )
+              )}
             </div>
           )}
         </div>
@@ -629,7 +727,7 @@ export default function ApplicationReview() {
         {preview && <img src={preview} alt="" className="max-h-[75vh] w-full rounded-xl object-contain" />}
       </Modal>
 
-      <Modal open={rejecting} onClose={() => setRejecting(false)} title="Reject reimbursement">
+      <Modal open={rejecting} onClose={() => setRejecting(false)} title="Reject application">
         <div className="space-y-3">
           <p className="text-sm text-slate-500">Let the creator know why this was rejected.</p>
           <Textarea
@@ -656,6 +754,19 @@ export default function ApplicationReview() {
           </div>
         </div>
       </Modal>
+
+      {paying && (
+        <ReleasePaymentModal
+          submission={{ id: app.submissions?.[0]?.id, application_id: app.id, application: app } as CampaignSubmission}
+          onClose={() => setPaying(false)}
+          onDone={() => {
+            setPaying(false);
+            qc.invalidateQueries({ queryKey: ["applications"] });
+            qc.invalidateQueries({ queryKey: ["application-review", id] });
+            navigate(backTo);
+          }}
+        />
+      )}
     </div>
   );
 }
