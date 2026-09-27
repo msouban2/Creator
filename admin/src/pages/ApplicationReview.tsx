@@ -23,7 +23,7 @@ import { ReviewNotesThread } from "@/components/ReviewNotesThread";
 import { Button } from "@/components/ui/button";
 import { Badge, Modal } from "@/components/ui/badge";
 import { Input, Textarea, Label, Select } from "@/components/ui/input";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { ReleasePaymentModal } from "./Submissions";
 
 async function fetchApplication(id: string) {
