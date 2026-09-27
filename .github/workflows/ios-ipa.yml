@@ -1,0 +1,66 @@
+name: Build iOS IPA
+
+# Builds a store-ready .ipa on a free GitHub-hosted macOS runner using
+# `eas build --local`. This runs the native iOS build ON the runner (not on
+# EAS's cloud), so it does NOT consume the EAS cloud build quota, while still
+# downloading the app's distribution certificate + provisioning profile from
+# EAS so the archive is signed correctly for App Store / TestFlight.
+#
+# One-time setup: add a repository secret named EXPO_TOKEN
+# (Settings -> Secrets and variables -> Actions -> New repository secret).
+#
+# Trigger it from the Actions tab ("Run workflow"), or by pushing to the
+# `ci-ios-build` branch. Download the `bilkul-ipa` artifact when it finishes,
+# then submit it to TestFlight with `eas submit`.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci-ios-build
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Write local iOS credentials from secrets
+        env:
+          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+        run: |
+          mkdir -p ios-credentials
+          node -e "const fs=require('fs');fs.writeFileSync('ios-credentials/dist-cert.p12',Buffer.from(process.env.IOS_DIST_P12_BASE64,'base64'));fs.writeFileSync('ios-credentials/profile.mobileprovision',Buffer.from(process.env.IOS_PROFILE_BASE64,'base64'));fs.writeFileSync('credentials.json',JSON.stringify({ios:{provisioningProfilePath:'ios-credentials/profile.mobileprovision',distributionCertificate:{path:'ios-credentials/dist-cert.p12',password:process.env.IOS_DIST_P12_PASSWORD}}},null,2));"
+
+      - name: Build iOS .ipa (local, signed with local credentials)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas build --platform ios --profile production-ios-local --local --non-interactive --output "$GITHUB_WORKSPACE/bilkul.ipa"
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bilkul-ipa
+          path: bilkul.ipa
+          if-no-files-found: error
+          retention-days: 14

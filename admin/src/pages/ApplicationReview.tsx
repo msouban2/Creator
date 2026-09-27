@@ -1,0 +1,661 @@
+import { useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  Loader2,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
+  Package,
+  Calendar,
+  Hash,
+  Clock,
+  Instagram,
+} from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { signedUrl, signedUrls } from "@/lib/storage";
+import type { Application } from "@/lib/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { CreatorInsights } from "@/components/CreatorInsights";
+import { ReviewNotesThread } from "@/components/ReviewNotesThread";
+import { Button } from "@/components/ui/button";
+import { Badge, Modal } from "@/components/ui/badge";
+import { Input, Textarea, Label, Select } from "@/components/ui/input";
+import { formatCurrency, formatDate } from "@/lib/utils";
+
+async function fetchApplication(id: string) {
+  const { data, error } = await supabase
+    .from("applications")
+    .select("*, campaign:campaigns(*), creator:profiles!creator_id(*), submissions:campaign_submissions(*)")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return data as Application;
+}
+
+async function fetchSellers() {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("role", "seller")
+    .order("full_name");
+  if (error) throw error;
+  return (data ?? []) as { id: string; full_name: string | null; email: string | null }[];
+}
+
+function reviewDeadline(app: Application): Date | null {
+  if (app.review_deadline) return new Date(app.review_deadline);
+  const hours = app.campaign?.review_upload_hours ?? null;
+  const from = app.product_received_at;
+  if (from && hours) return new Date(new Date(from).getTime() + hours * 3600 * 1000);
+  if (app.campaign?.campaign_deadline) return new Date(app.campaign.campaign_deadline);
+  return null;
+}
+
+function Detail({ icon: Icon, label, children }: { icon: typeof Hash; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 py-2">
+      <Icon size={16} className="mt-0.5 shrink-0 text-slate-400" />
+      <div className="min-w-0">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+        <div className="text-sm font-medium text-ink">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+export default function ApplicationReview() {
+  const { id = "" } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // When opened from Submissions purely to cross-check, the decision actions are
+  // hidden — payment is released on the Submissions page instead.
+  const readonly = searchParams.get("readonly") === "1";
+  // Where to return after acting / pressing Back — defaults to the applications
+  // list, but respects where the review was opened from (e.g. the Review Queue).
+  const fromParam = searchParams.get("from");
+  const backTo =
+    fromParam === "review-queue"
+      ? "/review-queue"
+      : fromParam === "employee-stats"
+        ? "/employee-stats"
+        : readonly
+          ? "/submissions"
+          : "/applications";
+  const backLabel =
+    fromParam === "review-queue"
+      ? "review queue"
+      : fromParam === "employee-stats"
+        ? "employee stats"
+        : readonly
+          ? "submissions"
+          : "applications";
+  const qc = useQueryClient();
+
+  const { data: app, isLoading } = useQuery({
+    queryKey: ["application-review", id],
+    queryFn: () => fetchApplication(id),
+    enabled: !!id,
+  });
+
+  const { data: purchaseUrl } = useQuery({
+    queryKey: ["review-purchase", id],
+    queryFn: () => signedUrl("purchase-orders", app?.purchase_proof),
+    enabled: !!app?.purchase_proof,
+  });
+
+  const { data: deliveryUrl } = useQuery({
+    queryKey: ["review-delivery", id],
+    queryFn: () => signedUrl("purchase-orders", app?.delivery_photo_url),
+    enabled: !!app?.delivery_photo_url,
+  });
+
+  const screenshots = app?.submissions?.[0]?.screenshots ?? [];
+  const { data: reviewUrls } = useQuery({
+    queryKey: ["review-screenshots", id, screenshots.length],
+    queryFn: () => signedUrls("submission-screenshots", screenshots),
+    enabled: screenshots.length > 0,
+  });
+
+  const videoPath = app?.submissions?.[0]?.video_url ?? null;
+  const { data: videoUrl } = useQuery({
+    queryKey: ["review-video", id, videoPath],
+    queryFn: () => signedUrl("submission-videos", videoPath),
+    enabled: !!videoPath,
+  });
+
+  const [preview, setPreview] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const [orderId, setOrderId] = useState("");
+  const [sellerFeedback, setSellerFeedback] = useState("");
+  const [sellerId, setSellerId] = useState("");
+  const [reviewDays, setReviewDays] = useState("");
+  const [reviewHours, setReviewHours] = useState("");
+  const [reviewMinutes, setReviewMinutes] = useState("");
+  const [detailsLoaded, setDetailsLoaded] = useState(false);
+  if (app && !detailsLoaded) {
+    setOrderId(app.order_id ?? "");
+    setSellerFeedback(app.seller_feedback ?? "");
+    setSellerId(app.campaign?.seller_id ?? "");
+    // Prefill the timer from the campaign fallback (stored as fractional hours),
+    // split into days / hours / minutes.
+    const fallbackHours = app.campaign?.review_upload_hours;
+    if (fallbackHours != null) {
+      const totalMin = Math.round(Number(fallbackHours) * 60);
+      const dd = Math.floor(totalMin / 1440);
+      const hh = Math.floor((totalMin % 1440) / 60);
+      const mm = totalMin % 60;
+      setReviewDays(dd ? String(dd) : "");
+      setReviewHours(hh ? String(hh) : "");
+      setReviewMinutes(mm ? String(mm) : "");
+    }
+    setDetailsLoaded(true);
+  }
+
+  const { data: sellers } = useQuery({ queryKey: ["sellers-for-review"], queryFn: fetchSellers });
+
+  const saveDetails = useMutation({
+    mutationFn: async () => {
+      const patch = {
+        order_id: orderId.trim() || null,
+        seller_feedback: sellerFeedback.trim() || null,
+      };
+      const { error } = await supabase.from("applications").update(patch).eq("id", id);
+      if (error) throw error;
+      // Assign / change the seller on the parent campaign so the order becomes
+      // visible to that seller (visibility is campaign-level).
+      if (app?.campaign_id && (sellerId || null) !== (app.campaign?.seller_id ?? null)) {
+        const { error: cErr } = await supabase
+          .from("campaigns")
+          .update({ seller_id: sellerId || null })
+          .eq("id", app.campaign_id);
+        if (cErr) throw cErr;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["application-review", id] });
+      qc.invalidateQueries({ queryKey: ["applications"] });
+      qc.invalidateQueries({ queryKey: ["seller-applications"] });
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
+    },
+  });
+
+  const orderApproval = useMutation({
+    mutationFn: async ({ approve, minutes, reject_reason }: { approve: boolean; minutes?: number; reject_reason?: string }) => {
+      const now = new Date();
+      const patch: Record<string, unknown> = approve
+        ? {
+            status: "order_approved",
+            product_received_at: now.toISOString(),
+            review_deadline:
+              minutes && minutes > 0 ? new Date(now.getTime() + minutes * 60 * 1000).toISOString() : null,
+          }
+        : { status: "rejected", reject_reason };
+      const { error } = await supabase.from("applications").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["applications"] });
+      qc.invalidateQueries({ queryKey: ["application-review", id] });
+      navigate(backTo);
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: async ({ status, reject_reason }: { status: "review" | "rejected"; reject_reason?: string }) => {
+      const patch: Record<string, unknown> = { status };
+      if (reject_reason !== undefined) patch.reject_reason = reject_reason;
+      const { error } = await supabase.from("applications").update(patch).eq("id", id);
+      if (error) throw error;
+
+      // On approval, make sure a submission row exists so it appears on the
+      // Submissions page for the final cross-check + payout. (Barter/reimbursement
+      // create one from the app; paid's reel link may not have, so back-fill it.)
+      if (status === "review") {
+        const { data: existing } = await supabase
+          .from("campaign_submissions")
+          .select("id")
+          .eq("application_id", id)
+          .maybeSingle();
+        if (!existing) {
+          await supabase.from("campaign_submissions").insert({
+            application_id: id,
+            reel_url: app?.reel_link ?? null,
+            review_status: "pending",
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["applications"] });
+      qc.invalidateQueries({ queryKey: ["application-review", id] });
+      navigate(backTo);
+    },
+  });
+
+  if (isLoading || !app) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const c = app.campaign;
+  const creator = app.creator;
+  const hasPurchase = !!app.purchase_proof;
+  const hasReview = screenshots.length > 0;
+  const canDecide = hasPurchase && hasReview;
+  const deadline = reviewDeadline(app);
+  const totalReviewMinutes =
+    (Number(reviewDays) || 0) * 1440 + (Number(reviewHours) || 0) * 60 + (Number(reviewMinutes) || 0);
+
+  return (
+    <div className="space-y-5">
+      <button
+        onClick={() => navigate(backTo)}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-ink"
+      >
+        <ArrowLeft size={16} /> Back to {backLabel}
+      </button>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-ink">{c?.title ?? "Reimbursement review"}</h2>
+          <p className="text-sm text-slate-500">{c?.brand_name}</p>
+        </div>
+        <Badge variant="info">Reimbursement</Badge>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* LEFT: screenshots */}
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-2 text-sm font-semibold text-ink">Order screenshot</p>
+              {hasPurchase ? (
+                purchaseUrl ? (
+                  <img
+                    src={purchaseUrl}
+                    onClick={() => setPreview(purchaseUrl)}
+                    className="max-h-[420px] w-full cursor-pointer rounded-xl bg-black object-contain ring-1 ring-slate-200"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-400">Loading…</p>
+                )
+              ) : (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  Creator hasn't uploaded the order screenshot yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {app.delivery_photo_url ? (
+            <Card>
+              <CardContent className="p-4">
+                <p className="mb-2 text-sm font-semibold text-ink">Delivered photo</p>
+                {deliveryUrl ? (
+                  <button onClick={() => setPreview(deliveryUrl)} className="block w-full">
+                    <img
+                      src={deliveryUrl}
+                      alt="delivered product"
+                      className="max-h-[420px] w-full rounded-xl object-contain ring-1 ring-slate-200"
+                    />
+                  </button>
+                ) : (
+                  <p className="text-sm text-slate-400">Loading…</p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-2 text-sm font-semibold text-ink">Review screenshot(s)</p>
+              {hasReview ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {(reviewUrls ?? []).map((url, i) => (
+                    <button key={i} onClick={() => setPreview(url)}>
+                      <img
+                        src={url}
+                        alt={`review ${i + 1}`}
+                        className="h-40 w-full rounded-xl object-cover ring-1 ring-blue-200"
+                      />
+                    </button>
+                  ))}
+                  {!reviewUrls ? <p className="text-sm text-slate-400">Loading…</p> : null}
+                </div>
+              ) : (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  Creator hasn't uploaded the review screenshot yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {videoPath && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="mb-2 text-sm font-semibold text-ink">Review video</p>
+                {videoUrl ? (
+                  <video
+                    src={videoUrl}
+                    controls
+                    className="max-h-[420px] w-full rounded-xl bg-black object-contain ring-1 ring-slate-200"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-400">Loading…</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* RIGHT: details + actions */}
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-1 text-sm font-semibold text-ink">Campaign &amp; product</p>
+              <div className="divide-y divide-slate-100">
+                <Detail icon={Package} label="Brand">{c?.brand_name ?? "—"}</Detail>
+                <Detail icon={Package} label="Product">{c?.product_name ?? "—"}</Detail>
+                <Detail icon={Hash} label="Expected ASIN">
+                  {c?.asin ? <span className="font-mono">{c.asin}</span> : "—"}
+                </Detail>
+                {c?.product_url ? (
+                  <Detail icon={ExternalLink} label="Product link">
+                    <a
+                      href={c.product_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                    >
+                      Open product <ExternalLink size={13} />
+                    </a>
+                  </Detail>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-1 text-sm font-semibold text-ink">Purchase &amp; timing</p>
+              <div className="divide-y divide-slate-100">
+                <Detail icon={CheckCircle2} label="Order amount">
+                  {app.submissions?.[0]?.order_amount != null
+                    ? formatCurrency(app.submissions[0].order_amount)
+                    : app.purchase_amount
+                    ? formatCurrency(app.purchase_amount)
+                    : "—"}
+                </Detail>
+                <Detail icon={Calendar} label="Product received">
+                  {app.product_received_at ? formatDate(app.product_received_at) : "—"}
+                </Detail>
+                <Detail icon={Calendar} label="Review submitted">
+                  {app.submissions?.[0]?.created_at ? formatDate(app.submissions[0].created_at) : "—"}
+                </Detail>
+                <Detail icon={Clock} label="Review upload deadline">
+                  {deadline ? formatDate(deadline.toISOString()) : "—"}
+                  {c?.review_upload_hours ? (
+                    <span className="ml-1 text-xs text-slate-400">({c.review_upload_hours}h window)</span>
+                  ) : null}
+                </Detail>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <p className="text-sm font-semibold text-ink">Order details (brand-visible)</p>
+              <div>
+                <Label>Brand</Label>
+                <Select value={sellerId} onChange={(e) => setSellerId(e.target.value)}>
+                  <option value="">No brand assigned</option>
+                  {sellers?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.full_name || s.email || s.id}
+                    </option>
+                  ))}
+                </Select>
+                <p className="mt-1 text-xs text-slate-400">
+                  Assigns the brand for this campaign, making the order visible to them.
+                </p>
+              </div>
+              <div>
+                <Label>Order ID</Label>
+                <Input value={orderId} onChange={(e) => setOrderId(e.target.value)} placeholder="e.g. 402-1234567" />
+              </div>
+              <div>
+                <Label>Brand feedback</Label>
+                <Textarea
+                  value={sellerFeedback}
+                  onChange={(e) => setSellerFeedback(e.target.value)}
+                  rows={2}
+                  placeholder="Notes for the brand about this order…"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" disabled={saveDetails.isPending} onClick={() => saveDetails.mutate()}>
+                  {saveDetails.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {saveDetails.isSuccess && !saveDetails.isPending ? "Saved ✓" : "Save details"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-1 text-sm font-semibold text-ink">Creator</p>
+              <div className="divide-y divide-slate-100">
+                <Detail icon={Instagram} label="Name">{creator?.full_name ?? "—"}</Detail>
+                {creator?.instagram_username ? (
+                  <Detail icon={Instagram} label="Instagram">
+                    @{creator.instagram_username}
+                    <span className="ml-1 text-xs text-slate-400">
+                      {creator.instagram_followers?.toLocaleString("en-IN")} followers
+                    </span>
+                  </Detail>
+                ) : null}
+                <Detail icon={Hash} label="Contact">
+                  {creator?.email ?? "—"}
+                  {creator?.phone ? <span className="ml-1 text-slate-400">· {creator.phone}</span> : null}
+                </Detail>
+                {creator?.niches && creator.niches.length > 0 ? (
+                  <Detail icon={Hash} label="Niches">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {creator.niches.map((n) => (
+                        <span key={n} className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600">
+                          {n}
+                        </span>
+                      ))}
+                    </div>
+                  </Detail>
+                ) : null}
+              </div>
+              <div className="mt-3">
+                <CreatorInsights creator={creator} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {readonly ? (
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              Cross-check view. Release the payment from the Submissions page.
+            </div>
+          ) : app.status === "completed" ? (
+            <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+              ✓ Approved &amp; paid.
+            </div>
+          ) : app.status === "ordered" ? (
+            <div className="space-y-2">
+              {app.order_submitted_at && (() => {
+                const deadline = new Date(app.order_submitted_at).getTime() + 24 * 3600 * 1000;
+                const overdue = Date.now() > deadline;
+                return (
+                  <p className={`rounded-lg px-3 py-2 text-sm font-medium ${overdue ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-600"}`}>
+                    ⏱ Submitted {formatDate(app.order_submitted_at)} · {overdue ? "approval overdue — please review now" : `approve by ${formatDate(new Date(deadline).toISOString())}`}
+                  </p>
+                );
+              })()}
+              {!hasPurchase && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  Waiting on the creator's order screenshot.
+                </p>
+              )}
+              <div>
+                <Label>Review upload timer</Label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={reviewDays}
+                      onChange={(e) => setReviewDays(e.target.value)}
+                      placeholder="Days"
+                    />
+                    <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Days</p>
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={reviewHours}
+                      onChange={(e) => setReviewHours(e.target.value)}
+                      placeholder="Hours"
+                    />
+                    <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Hours</p>
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={reviewMinutes}
+                      onChange={(e) => setReviewMinutes(e.target.value)}
+                      placeholder="Minutes"
+                    />
+                    <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Minutes</p>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  {totalReviewMinutes > 0
+                    ? `Creator must upload their review by ${formatDate(
+                        new Date(Date.now() + totalReviewMinutes * 60 * 1000).toISOString(),
+                      )}.`
+                    : "Leave blank to fall back to the campaign deadline."}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  disabled={!hasPurchase || orderApproval.isPending}
+                  onClick={() =>
+                    orderApproval.mutate({
+                      approve: true,
+                      minutes: totalReviewMinutes > 0 ? totalReviewMinutes : undefined,
+                    })
+                  }
+                >
+                  {orderApproval.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  Approve Order
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50"
+                  disabled={!hasPurchase || orderApproval.isPending}
+                  onClick={() => setRejecting(true)}
+                >
+                  <XCircle size={16} /> Reject
+                </Button>
+              </div>
+            </div>
+          ) : app.status === "review" ? (
+            <div className="rounded-xl bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">
+              ✓ Reviewed — cross-check &amp; release payment on the Submissions page.
+            </div>
+          ) : app.status === "rejected" ? (
+            <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              Rejected{app.reject_reason ? `: ${app.reject_reason}` : ""}.
+              {(app.reject_count ?? 0) > 0 ? (
+                <div className="mt-1 text-xs font-medium text-rose-600">
+                  Rejection {app.reject_count} of 5.
+                  {(app.reject_count ?? 0) >= 5
+                    ? " Limit reached — the creator is locked out for 24h, then their attempts reset."
+                    : " The creator can fix &amp; re-upload."}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {!canDecide && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  Both the purchase and review screenshots are required before you can submit or reject.
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  disabled={!canDecide || update.isPending}
+                  onClick={() => update.mutate({ status: "review" })}
+                >
+                  {update.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  Submit for approval
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50"
+                  disabled={!canDecide || update.isPending}
+                  onClick={() => setRejecting(true)}
+                >
+                  <XCircle size={16} /> Reject
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <ReviewNotesThread applicationId={app.id} submissionId={app.submissions?.[0]?.id} />
+      </div>
+
+      <Modal open={!!preview} onClose={() => setPreview(null)} title="Screenshot">
+        {preview && <img src={preview} alt="" className="max-h-[75vh] w-full rounded-xl object-contain" />}
+      </Modal>
+
+      <Modal open={rejecting} onClose={() => setRejecting(false)} title="Reject reimbursement">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Let the creator know why this was rejected.</p>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Purchase video doesn't match the ASIN / review not visible…"
+            rows={3}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRejecting(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="border-rose-200 bg-rose-600 hover:bg-rose-700"
+              disabled={update.isPending || orderApproval.isPending}
+              onClick={() =>
+                app.status === "ordered"
+                  ? orderApproval.mutate({ approve: false, reject_reason: reason })
+                  : update.mutate({ status: "rejected", reject_reason: reason })
+              }
+            >
+              Confirm reject
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}

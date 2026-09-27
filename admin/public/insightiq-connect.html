@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect Instagram — Bilkul</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #FAB0B5; color: #1c1c1c; display: flex; min-height: 100vh; margin: 0;
+      align-items: center; justify-content: center; text-align: center; }
+    .card { max-width: 340px; padding: 28px; }
+    .spinner { width: 42px; height: 42px; border: 4px solid rgba(0,0,0,0.15);
+      border-top-color: #1c1c1c; border-radius: 50%; margin: 0 auto 18px; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    a { color: #7a2c34; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <h2 id="msg">Opening Instagram…</h2>
+    <p id="sub">Please connect your account to continue.</p>
+  </div>
+
+  <script src="https://cdn.getphyllo.com/connect/v2/phyllo-connect.js"></script>
+  <script>
+    (function () {
+      var q = new URLSearchParams(window.location.search);
+      var appRedirect = "aaina://personal-info";
+
+      // ---- Return leg: detect that Phyllo sent the browser back here. ------
+      // Redirect mode should append ?status=success&account_ids=..., but that
+      // append can be flaky in mobile in-app browsers, so we also treat "we
+      // previously started a Connect flow" (session flag) as a return.
+      var status = q.get("status");
+      var accountIds = q.get("account_ids");
+      var started = sessionStorage.getItem("iq_started");
+
+      if (status || accountIds || started) {
+        sessionStorage.removeItem("iq_started");
+        var first = accountIds ? accountIds.split(",")[0] : "";
+        var bad = status && !/success/i.test(status);
+        if (bad && !first) {
+          window.location.replace(appRedirect + "?insightiq=" + encodeURIComponent(status));
+        } else if (first) {
+          window.location.replace(appRedirect + "?insightiq=connected&account_id=" + encodeURIComponent(first));
+        } else {
+          // No account id in the URL — the server-side webhook + sync will
+          // resolve it. Tell the app we connected so it refreshes.
+          window.location.replace(appRedirect + "?insightiq=connected");
+        }
+        return;
+      }
+
+      // ---- Start leg: open the Phyllo Connect flow in redirect mode. -------
+      var token = q.get("token");
+      var userId = q.get("user_id");
+      var env = q.get("env") || "staging";
+      // Default to Instagram Direct (direct Instagram login, no Facebook needed).
+      var platform = q.get("platform") || "d3badb09-a81f-4444-bc27-1a994d939e00";
+
+      // Clean URL (no query) so Phyllo's naive "?status=..." append stays valid.
+      var returnUrl = window.location.origin + window.location.pathname;
+
+      if (!token || !userId) {
+        document.getElementById("msg").textContent = "Something went wrong";
+        document.getElementById("sub").textContent = "Missing connection details. Please try again from the app.";
+        return;
+      }
+
+      try {
+        sessionStorage.setItem("iq_started", "1");
+        var connect = PhylloConnect.initialize({
+          clientDisplayName: "Bilkul",
+          environment: env,
+          userId: userId,
+          token: token,
+          workPlatformId: platform,
+          singleAccount: true,
+          redirect: true,
+          redirectURL: returnUrl,
+        });
+        connect.open();
+      } catch (e) {
+        sessionStorage.removeItem("iq_started");
+        document.getElementById("msg").textContent = "Couldn't start";
+        document.getElementById("sub").innerHTML =
+          (e && e.message ? e.message + "<br/>" : "") +
+          "<a href='" + appRedirect + "?insightiq=error'>Return to Bilkul</a>";
+      }
+    })();
+  </script>
+</body>
+</html>

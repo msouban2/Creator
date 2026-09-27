@@ -1,0 +1,260 @@
+import { useState } from "react";
+import { Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
+import { Input } from "../../src/components/ui/Input";
+import { Button } from "../../src/components/ui/Button";
+import { useSubmitContent, useUploadScreenshots, useUploadVideo } from "../../src/api/submissions";
+import { useApplication } from "../../src/api/applications";
+import { colors } from "../../src/lib/theme";
+
+export default function SubmitScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { data: app } = useApplication(id!);
+  const isReimbursement = app?.campaign?.campaign_type === "reimbursement";
+  const [reel, setReel] = useState("");
+  const [post, setPost] = useState("");
+  const [story, setStory] = useState("");
+  const [youtube, setYoutube] = useState("");
+  const [notes, setNotes] = useState("");
+  const [images, setImages] = useState<string[]>([]);
+  const [video, setVideo] = useState<string | null>(null);
+  const [sellerFeedbackVideo, setSellerFeedbackVideo] = useState<string | null>(null);
+  const [orderAmount, setOrderAmount] = useState("");
+
+  const upload = useUploadScreenshots();
+  const uploadVideo = useUploadVideo();
+  const submit = useSubmitContent();
+
+  const pickImages = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      quality: 0.7,
+    });
+    if (!result.canceled) {
+      setImages((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
+    }
+  };
+
+  const pickVideo = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsMultipleSelection: false,
+      quality: 0.7,
+      videoMaxDuration: 120,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setVideo(result.assets[0].uri);
+    }
+  };
+
+  const pickSellerFeedback = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsMultipleSelection: false,
+      quality: 0.7,
+      videoMaxDuration: 120,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setSellerFeedbackVideo(result.assets[0].uri);
+    }
+  };
+
+  const onSubmit = async () => {
+    if (isReimbursement) {
+      if (images.length === 0) {
+        Alert.alert("Add screenshots", "Please upload at least one screenshot of your product review / order.");
+        return;
+      }
+    } else if (!reel && !post && !youtube) {
+      Alert.alert("Add content", "Please provide at least one content link.");
+      return;
+    }
+    if (!video) {
+      Alert.alert("Add review video", "Please upload your review video before submitting.");
+      return;
+    }
+    try {
+      let screenshots: string[] = [];
+      if (images.length) screenshots = await upload.mutateAsync(images);
+      const video_url = await uploadVideo.mutateAsync(video);
+      const seller_feedback_video = sellerFeedbackVideo
+        ? await uploadVideo.mutateAsync(sellerFeedbackVideo)
+        : undefined;
+      await submit.mutateAsync({
+        applicationId: id!,
+        reel_url: reel || undefined,
+        post_url: post || undefined,
+        story_url: story || undefined,
+        youtube_url: youtube || undefined,
+        notes: notes || undefined,
+        screenshots,
+        video_url,
+        seller_feedback_video,
+        order_amount: orderAmount.trim() ? Number(orderAmount) : undefined,
+      });
+      Alert.alert("Submitted!", "Your content is now under review.");
+      router.replace("/(tabs)/campaigns");
+    } catch (e: any) {
+      Alert.alert("Submission failed", e.message ?? "Try again.");
+    }
+  };
+
+  const loading = upload.isPending || uploadVideo.isPending || submit.isPending;
+
+  return (
+    <ScrollView className="flex-1 bg-canvas" contentContainerStyle={{ paddingBottom: 60, paddingTop: insets.top + 12 }}>
+      <View className="flex-row items-center gap-3 px-5 pb-4">
+        <Pressable onPress={() => router.back()}><Ionicons name="chevron-back" size={26} color={colors.ink} /></Pressable>
+        <Text className="text-xl font-bold text-ink">{isReimbursement ? "Upload Review" : "Submit Content"}</Text>
+      </View>
+
+      <View className="gap-4 px-5">
+        {isReimbursement ? (
+          <View className="rounded-2xl bg-primary-50 p-3">
+            <Text className="text-sm font-semibold text-ink">Almost done!</Text>
+            <Text className="mt-1 text-xs text-ink-soft">
+              Upload a screenshot of your product review (and order, if you haven't already). No reel needed — our team will verify it and send your reimbursement to your wallet.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Input label="Instagram Reel URL" icon="videocam-outline" placeholder="https://instagram.com/reel/..." autoCapitalize="none" value={reel} onChangeText={setReel} />
+            <Input label="Instagram Post URL" icon="image-outline" placeholder="https://instagram.com/p/..." autoCapitalize="none" value={post} onChangeText={setPost} />
+            <Input label="Instagram Story URL" icon="ellipse-outline" placeholder="https://instagram.com/stories/..." autoCapitalize="none" value={story} onChangeText={setStory} />
+            <Input label="YouTube URL" icon="logo-youtube" placeholder="https://youtube.com/watch?v=..." autoCapitalize="none" value={youtube} onChangeText={setYoutube} />
+          </>
+        )}
+
+        <View className="gap-2">
+          <Text className="text-sm font-semibold text-ink">Notes</Text>
+          <View className="rounded-2xl border border-primary-100 bg-white p-3">
+            <Input placeholder="Add any notes for the reviewer…" multiline value={notes} onChangeText={setNotes} style={{ minHeight: 80, textAlignVertical: "top" }} />
+          </View>
+        </View>
+
+        <View className="gap-2">
+          <Text className="text-sm font-semibold text-ink">
+            {isReimbursement ? "Review & order screenshots" : "Upload Screenshots"}
+          </Text>
+          {isReimbursement ? (
+            <Text className="text-xs text-ink-muted">Add your product review screenshot (and order proof if needed).</Text>
+          ) : null}
+          <View className="flex-row flex-wrap gap-3">
+            {images.map((uri, i) => (
+              <View key={uri + i} className="relative">
+                <Image source={{ uri }} className="h-20 w-20 rounded-xl" />
+                <Pressable onPress={() => setImages((prev) => prev.filter((u) => u !== uri))} className="absolute -right-2 -top-2 h-6 w-6 items-center justify-center rounded-full bg-primary">
+                  <Ionicons name="close" size={14} color="#fff" />
+                </Pressable>
+              </View>
+            ))}
+            <Pressable onPress={pickImages} className="h-20 w-20 items-center justify-center rounded-xl border border-dashed border-primary bg-primary-50">
+              <Ionicons name="add" size={26} color={colors.primary} />
+            </Pressable>
+          </View>
+        </View>
+
+        {isReimbursement ? (
+          <View className="gap-2">
+            <Text className="text-sm font-semibold text-ink">Upload Review Video</Text>
+            <Text className="text-xs text-ink-muted">Add a short video of your product review for faster verification.</Text>
+            {video ? (
+              <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
+                <View className="flex-row items-center gap-3">
+                  <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary-50">
+                    <Ionicons name="videocam" size={22} color={colors.primary} />
+                  </View>
+                  <View>
+                    <Text className="text-sm font-semibold text-ink">Video selected</Text>
+                    <Text className="text-xs text-ink-muted">Tap remove to change</Text>
+                  </View>
+                </View>
+                <Pressable onPress={() => setVideo(null)} className="h-8 w-8 items-center justify-center rounded-full bg-primary-50">
+                  <Ionicons name="close" size={16} color={colors.primary} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={pickVideo} className="flex-row items-center justify-center gap-2 rounded-2xl border border-dashed border-primary bg-primary-50 py-4">
+                <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
+                <Text className="text-sm font-semibold text-primary">Select a video</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          <View className="gap-2">
+            <Text className="text-sm font-semibold text-ink">Upload Review Video</Text>
+            <Text className="text-xs text-ink-muted">Add a short video of your content for faster review &amp; payout.</Text>
+            {video ? (
+              <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
+                <View className="flex-row items-center gap-3">
+                  <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary-50">
+                    <Ionicons name="videocam" size={22} color={colors.primary} />
+                  </View>
+                  <View>
+                    <Text className="text-sm font-semibold text-ink">Video selected</Text>
+                    <Text className="text-xs text-ink-muted">Tap remove to change</Text>
+                  </View>
+                </View>
+                <Pressable onPress={() => setVideo(null)} className="h-8 w-8 items-center justify-center rounded-full bg-primary-50">
+                  <Ionicons name="close" size={16} color={colors.primary} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={pickVideo} className="flex-row items-center justify-center gap-2 rounded-2xl border border-dashed border-primary bg-primary-50 py-4">
+                <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
+                <Text className="text-sm font-semibold text-primary">Select a video</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        <View className="gap-2">
+          <Text className="text-sm font-semibold text-ink">Order amount (₹)</Text>
+          <Text className="text-xs text-ink-muted">The order value of the product you received (optional).</Text>
+          <Input
+            placeholder="e.g. 899"
+            keyboardType="numeric"
+            value={orderAmount}
+            onChangeText={setOrderAmount}
+          />
+        </View>
+
+        <View className="gap-2">
+          <Text className="text-sm font-semibold text-ink">Brand feedback recording</Text>
+          <Text className="text-xs text-ink-muted">
+            A short screen recording of the feedback you left for the brand/seller (optional, speeds up verification).
+          </Text>
+          {sellerFeedbackVideo ? (
+            <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
+              <View className="flex-row items-center gap-3">
+                <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary-50">
+                  <Ionicons name="chatbox-ellipses" size={22} color={colors.primary} />
+                </View>
+                <View>
+                  <Text className="text-sm font-semibold text-ink">Feedback recording selected</Text>
+                  <Text className="text-xs text-ink-muted">Tap remove to change</Text>
+                </View>
+              </View>
+              <Pressable onPress={() => setSellerFeedbackVideo(null)} className="h-8 w-8 items-center justify-center rounded-full bg-primary-50">
+                <Ionicons name="close" size={16} color={colors.primary} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable onPress={pickSellerFeedback} className="flex-row items-center justify-center gap-2 rounded-2xl border border-dashed border-primary bg-primary-50 py-4">
+              <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
+              <Text className="text-sm font-semibold text-primary">Select brand feedback video</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Button label={isReimbursement ? "Submit for Reimbursement" : "Submit for Review"} onPress={onSubmit} loading={loading} variant="dark" fullWidth />
+      </View>
+    </ScrollView>
+  );
+}
