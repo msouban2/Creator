@@ -127,6 +127,20 @@ export default function ApplicationReview() {
     enabled: !!videoPath,
   });
 
+  const feedbackShotPath = app?.submissions?.[0]?.seller_feedback_screenshot ?? null;
+  const { data: feedbackShotUrl } = useQuery({
+    queryKey: ["review-seller-feedback-shot", id, feedbackShotPath],
+    queryFn: () => signedUrl("submission-screenshots", feedbackShotPath),
+    enabled: !!feedbackShotPath,
+  });
+
+  const feedbackVideoPath = app?.submissions?.[0]?.seller_feedback_video ?? null;
+  const { data: feedbackVideoUrl } = useQuery({
+    queryKey: ["review-seller-feedback-video", id, feedbackVideoPath],
+    queryFn: () => signedUrl("submission-videos", feedbackVideoPath),
+    enabled: !feedbackShotPath && !!feedbackVideoPath,
+  });
+
   const [preview, setPreview] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -432,6 +446,41 @@ export default function ApplicationReview() {
                   />
                 ) : (
                   <p className="text-sm text-slate-400">Loading…</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {isReimbursement && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="mb-2 text-sm font-semibold text-ink">Seller feedback screenshot</p>
+                {feedbackShotPath ? (
+                  feedbackShotUrl ? (
+                    <button onClick={() => setPreview(feedbackShotUrl)}>
+                      <img
+                        src={feedbackShotUrl}
+                        alt="seller feedback"
+                        className="h-40 w-full rounded-xl object-cover ring-1 ring-blue-200"
+                      />
+                    </button>
+                  ) : (
+                    <p className="text-sm text-slate-400">Loading…</p>
+                  )
+                ) : feedbackVideoPath ? (
+                  feedbackVideoUrl ? (
+                    <video
+                      src={feedbackVideoUrl}
+                      controls
+                      className="max-h-[420px] w-full rounded-xl bg-black object-contain ring-1 ring-slate-200"
+                    />
+                  ) : (
+                    <p className="text-sm text-slate-400">Loading…</p>
+                  )
+                ) : (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    Creator hasn't uploaded the seller feedback screenshot yet.
+                  </p>
                 )}
               </CardContent>
             </Card>
