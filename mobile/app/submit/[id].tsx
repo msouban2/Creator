@@ -9,6 +9,14 @@ import { Button } from "../../src/components/ui/Button";
 import { useSubmitContent, useUploadScreenshots, useUploadVideo } from "../../src/api/submissions";
 import { useApplication } from "../../src/api/applications";
 import { colors } from "../../src/lib/theme";
+import { SampleProofChip, SampleProofGallery } from "../../src/components/SampleProof";
+import {
+  REIMBURSEMENT_SAMPLES,
+  SAMPLE_ORDER_SCREENSHOT,
+  SAMPLE_REVIEW_SCREENSHOT,
+  SAMPLE_REVIEW_VIDEO,
+  SAMPLE_SELLER_FEEDBACK,
+} from "../../src/lib/samples";
 
 export default function SubmitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -133,7 +141,11 @@ export default function SubmitScreen() {
               </Text>
             ) : null}
           </View>
-        ) : (
+        ) : null}
+
+        {isReimbursement ? <SampleProofGallery samples={REIMBURSEMENT_SAMPLES} /> : null}
+
+        {isReimbursement ? null : (
           <>
             <Input label="Instagram Reel URL" icon="videocam-outline" placeholder="https://instagram.com/reel/..." autoCapitalize="none" value={reel} onChangeText={setReel} />
             <Input label="Instagram Post URL" icon="image-outline" placeholder="https://instagram.com/p/..." autoCapitalize="none" value={post} onChangeText={setPost} />
@@ -154,7 +166,13 @@ export default function SubmitScreen() {
             {isReimbursement ? "Review & order screenshots" : "Upload Screenshots"}
           </Text>
           {isReimbursement ? (
-            <Text className="text-xs text-ink-muted">Add your product review screenshot (and order proof if needed).</Text>
+            <>
+              <Text className="text-xs text-ink-muted">Add your product review screenshot (and order proof if needed).</Text>
+              <View className="flex-row flex-wrap gap-2">
+                <SampleProofChip sample={SAMPLE_REVIEW_SCREENSHOT} />
+                <SampleProofChip sample={SAMPLE_ORDER_SCREENSHOT} />
+              </View>
+            </>
           ) : null}
           <View className="flex-row flex-wrap gap-3">
             {images.map((uri, i) => (
@@ -175,6 +193,7 @@ export default function SubmitScreen() {
           <View className="gap-2">
             <Text className="text-sm font-semibold text-ink">Upload Review Video</Text>
             <Text className="text-xs text-ink-muted">Add a short video of your product review for faster verification.</Text>
+            <SampleProofChip sample={SAMPLE_REVIEW_VIDEO} />
             {video ? (
               <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
                 <View className="flex-row items-center gap-3">
@@ -241,6 +260,7 @@ export default function SubmitScreen() {
           <Text className="text-xs text-ink-muted">
             A short screen recording of the feedback you left for the brand/seller (optional, speeds up verification).
           </Text>
+          {isReimbursement ? <SampleProofChip sample={SAMPLE_SELLER_FEEDBACK} /> : null}
           {sellerFeedbackVideo ? (
             <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
               <View className="flex-row items-center gap-3">

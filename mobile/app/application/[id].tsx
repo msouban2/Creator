@@ -6,6 +6,8 @@ import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import { useApplication, useSubmitPurchaseProof, useSubmitDraftVideo, useSubmitReelLink, useSubmitDeliveryPhoto, useSubmitOrderScreenshot, useStartOrderWindow } from "../../src/api/applications";
+import { SampleProofChip } from "../../src/components/SampleProof";
+import { SAMPLE_ORDER_SCREENSHOT } from "../../src/lib/samples";
 import { Card } from "../../src/components/ui/Card";
 import { Input } from "../../src/components/ui/Input";
 import { StatusBadge } from "../../src/components/ui/StatusBadge";
@@ -325,6 +327,9 @@ export default function ApplicationDetailScreen() {
                   this order is closed for 24 hours.
                 </Text>
               ) : null}
+              <View className="mt-2">
+                <SampleProofChip sample={SAMPLE_ORDER_SCREENSHOT} />
+              </View>
 
               {orderScreenshot ? (
                 <View className="mt-3 flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
@@ -592,6 +597,9 @@ export default function ApplicationDetailScreen() {
                 <Text className="mt-1 text-xs text-ink-soft">
                   Add a screenshot of your order confirmation or invoice.
                 </Text>
+                <View className="mt-2">
+                  <SampleProofChip sample={SAMPLE_ORDER_SCREENSHOT} />
+                </View>
 
                 {orderScreenshot ? (
                   <View className="mt-3 flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
