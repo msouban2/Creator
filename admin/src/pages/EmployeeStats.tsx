@@ -223,9 +223,9 @@ function deriveEvents(apps: Application[], assignMap: Map<string, string | null>
       push("review_rec", reviewRecState(sub.review_status), owner || UNASSIGNED, sub.reviewed_at ?? sub.created_at);
     }
     // Seller feedback.
-    if (a.seller_feedback || sub?.seller_feedback_video) {
-      const done = !!a.seller_feedback || !!sub?.seller_feedback_video;
-      push("seller_fb", a.status === "rejected" ? "rejected" : done ? "approved" : "pending", actor || UNASSIGNED, actedAt);
+    const sellerFb = !!a.seller_feedback || !!sub?.seller_feedback_screenshot || !!sub?.seller_feedback_video;
+    if (sellerFb) {
+      push("seller_fb", a.status === "rejected" ? "rejected" : "approved", actor || UNASSIGNED, actedAt);
     }
   }
   return out;
@@ -320,7 +320,7 @@ export default function EmployeeStats() {
           "id, status, purchase_proof, draft_video_url, reel_link, seller_feedback, last_action_by, last_action_at, applied_at, completed_at," +
             " creator:profiles!creator_id(id, full_name, instagram_username)," +
             " campaign:campaigns(id, title, brand_name, seller_name, campaign_type, campaign_code, asin, product_name)," +
-            " submissions:campaign_submissions(id, review_status, reviewed_by, reviewed_at, created_at, claimed_by, seller_feedback_video)"
+            " submissions:campaign_submissions(id, review_status, reviewed_by, reviewed_at, created_at, claimed_by, seller_feedback_video, seller_feedback_screenshot)"
         )
         .order("applied_at", { ascending: false })
         .limit(5000);

@@ -184,7 +184,8 @@ function reviewPending(a: Application): boolean {
   return !!sub && sub.review_status === "pending";
 }
 function hasSellerFeedback(a: Application): boolean {
-  return !!a.seller_feedback || !!a.submissions?.[0]?.seller_feedback_video;
+  const sub = a.submissions?.[0];
+  return !!a.seller_feedback || !!sub?.seller_feedback_screenshot || !!sub?.seller_feedback_video;
 }
 
 // Which applications belong under a given action tab.

@@ -167,6 +167,7 @@ export interface CampaignSubmission {
   notes: string | null;
   video_url: string | null;
   seller_feedback_video: string | null;
+  seller_feedback_screenshot: string | null;
   order_amount: number | null;
   review_tag: string | null;
   review_status: ReviewStatus;

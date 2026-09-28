@@ -33,7 +33,7 @@ export default function SubmitScreen() {
   const [notes, setNotes] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [video, setVideo] = useState<string | null>(null);
-  const [sellerFeedbackVideo, setSellerFeedbackVideo] = useState<string | null>(null);
+  const [sellerFeedbackShot, setSellerFeedbackShot] = useState<string | null>(null);
   const [orderAmount, setOrderAmount] = useState("");
 
   const upload = useUploadScreenshots();
@@ -65,13 +65,12 @@ export default function SubmitScreen() {
 
   const pickSellerFeedback = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
+      mediaTypes: ["images"],
       allowsMultipleSelection: false,
       quality: 0.7,
-      videoMaxDuration: 120,
     });
     if (!result.canceled && result.assets[0]) {
-      setSellerFeedbackVideo(result.assets[0].uri);
+      setSellerFeedbackShot(result.assets[0].uri);
     }
   };
 
@@ -97,8 +96,8 @@ export default function SubmitScreen() {
       let screenshots: string[] = [];
       if (images.length) screenshots = await upload.mutateAsync(images);
       const video_url = await uploadVideo.mutateAsync(video);
-      const seller_feedback_video = sellerFeedbackVideo
-        ? await uploadVideo.mutateAsync(sellerFeedbackVideo)
+      const seller_feedback_screenshot = sellerFeedbackShot
+        ? (await upload.mutateAsync([sellerFeedbackShot]))[0]
         : undefined;
       await submit.mutateAsync({
         applicationId: id!,
@@ -109,7 +108,7 @@ export default function SubmitScreen() {
         notes: notes || undefined,
         screenshots,
         video_url,
-        seller_feedback_video,
+        seller_feedback_screenshot,
         order_amount: orderAmount.trim() ? Number(orderAmount) : undefined,
       });
       Alert.alert("Submitted!", "Your content is now under review.");
@@ -256,30 +255,28 @@ export default function SubmitScreen() {
         </View>
 
         <View className="gap-2">
-          <Text className="text-sm font-semibold text-ink">Brand feedback recording</Text>
+          <Text className="text-sm font-semibold text-ink">Seller feedback screenshot</Text>
           <Text className="text-xs text-ink-muted">
-            A short screen recording of the feedback you left for the brand/seller (optional, speeds up verification).
+            A screenshot of the feedback you left for the brand/seller (optional, speeds up verification).
           </Text>
           {isReimbursement ? <SampleProofChip sample={SAMPLE_SELLER_FEEDBACK} /> : null}
-          {sellerFeedbackVideo ? (
+          {sellerFeedbackShot ? (
             <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
               <View className="flex-row items-center gap-3">
-                <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary-50">
-                  <Ionicons name="chatbox-ellipses" size={22} color={colors.primary} />
-                </View>
+                <Image source={{ uri: sellerFeedbackShot }} className="h-12 w-12 rounded-xl" />
                 <View>
-                  <Text className="text-sm font-semibold text-ink">Feedback recording selected</Text>
+                  <Text className="text-sm font-semibold text-ink">Screenshot selected</Text>
                   <Text className="text-xs text-ink-muted">Tap remove to change</Text>
                 </View>
               </View>
-              <Pressable onPress={() => setSellerFeedbackVideo(null)} className="h-8 w-8 items-center justify-center rounded-full bg-primary-50">
+              <Pressable onPress={() => setSellerFeedbackShot(null)} className="h-8 w-8 items-center justify-center rounded-full bg-primary-50">
                 <Ionicons name="close" size={16} color={colors.primary} />
               </Pressable>
             </View>
           ) : (
             <Pressable onPress={pickSellerFeedback} className="flex-row items-center justify-center gap-2 rounded-2xl border border-dashed border-primary bg-primary-50 py-4">
-              <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
-              <Text className="text-sm font-semibold text-primary">Select brand feedback video</Text>
+              <Ionicons name="image-outline" size={20} color={colors.primary} />
+              <Text className="text-sm font-semibold text-primary">Select seller feedback screenshot</Text>
             </Pressable>
           )}
         </View>

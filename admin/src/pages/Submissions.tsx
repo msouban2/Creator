@@ -556,6 +556,11 @@ function SubmissionRow({
     queryFn: () => signedUrl("submission-videos", s.seller_feedback_video),
     enabled: isOpen && !!s.seller_feedback_video,
   });
+  const { data: sellerFeedbackShotUrl } = useQuery({
+    queryKey: ["sub-seller-feedback-shot", s.id],
+    queryFn: () => signedUrl("submission-screenshots", s.seller_feedback_screenshot),
+    enabled: isOpen && !!s.seller_feedback_screenshot,
+  });
 
   const ctype = s.application?.campaign?.campaign_type;
   const igUsername = s.application?.creator?.instagram_username ?? null;
@@ -716,8 +721,12 @@ function SubmissionRow({
                     )}
                   </div>
                   <div>
-                    <p className="mb-1 text-[11px] font-semibold text-slate-500">Brand feedback recording</p>
-                    {sellerFeedbackUrl ? (
+                    <p className="mb-1 text-[11px] font-semibold text-slate-500">Seller feedback</p>
+                    {sellerFeedbackShotUrl ? (
+                      <button onClick={() => setLightbox(sellerFeedbackShotUrl)}>
+                        <img src={sellerFeedbackShotUrl} alt="seller feedback" className="h-24 w-24 rounded-xl object-cover ring-1 ring-slate-200" />
+                      </button>
+                    ) : sellerFeedbackUrl ? (
                       <video src={sellerFeedbackUrl} controls className="h-24 w-auto max-w-[180px] rounded-xl bg-black object-contain" />
                     ) : (
                       <p className="text-xs text-amber-500">Not uploaded</p>

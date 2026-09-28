@@ -29,6 +29,7 @@ export interface SubmissionInput {
   screenshots?: string[];
   video_url?: string;
   seller_feedback_video?: string;
+  seller_feedback_screenshot?: string;
   order_amount?: number;
 }
 
@@ -105,6 +106,7 @@ export function useSubmitContent() {
         screenshots: input.screenshots ?? [],
         video_url: input.video_url,
         seller_feedback_video: input.seller_feedback_video,
+        seller_feedback_screenshot: input.seller_feedback_screenshot,
         order_amount: input.order_amount,
         review_status: "pending" as const,
       };

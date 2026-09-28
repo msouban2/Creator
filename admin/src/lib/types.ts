@@ -245,6 +245,7 @@ export interface CampaignSubmission {
   screenshots: string[];
   notes: string | null;
   seller_feedback_video: string | null;
+  seller_feedback_screenshot: string | null;
   order_amount: number | null;
   review_tag: string | null;
   review_note: string | null;

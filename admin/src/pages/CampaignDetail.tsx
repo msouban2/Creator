@@ -576,7 +576,7 @@ export default function CampaignDetail() {
                 if (orders.length === 0) return <tr><Td className="text-center text-slate-400">No orders match.</Td></tr>;
                 return orders.map((a, i) => {
                   const sub = a.submissions?.[0];
-                  const sellerFb = a.seller_feedback || sub?.seller_feedback_video;
+                  const sellerFb = a.seller_feedback || sub?.seller_feedback_screenshot || sub?.seller_feedback_video;
                   return (
                     <tr key={a.id} className="hover:bg-slate-50/50">
                       <Td>{i + 1}</Td>
@@ -591,7 +591,7 @@ export default function CampaignDetail() {
                       <Td>{formatCurrency(a.purchase_amount ?? campaign.reward_amount)}</Td>
                       <Td><div><LinkCell bucket="purchase-orders" path={a.purchase_proof} /><div><Pill state={orderShotState(a)} /></div></div></Td>
                       <Td><div><LinkCell bucket="submission-videos" path={sub?.video_url} /><div><Pill state={sub?.video_url ? reviewState(a) : "none"} /></div></div></Td>
-                      <Td><div><LinkCell bucket="submission-videos" path={sub?.seller_feedback_video} /><div><Pill state={sellerFb ? "approved" : "none"} /></div></div></Td>
+                      <Td><div>{sub?.seller_feedback_screenshot ? <LinkCell bucket="submission-screenshots" path={sub.seller_feedback_screenshot} /> : <LinkCell bucket="submission-videos" path={sub?.seller_feedback_video} />}<div><Pill state={sellerFb ? "approved" : "none"} /></div></div></Td>
                       <Td>{a.payout_amount ? formatCurrency(a.payout_amount) : "-"}</Td>
                       <Td>{a.completed_at ? formatDate(a.completed_at) : "-"}</Td>
                       <Td><span className="text-slate-300">-</span></Td>
