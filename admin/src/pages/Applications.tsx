@@ -88,7 +88,9 @@ function nextAction(app: Application): { who: ActionWho; text: string } {
     if (s === "selected") return { who: "creator", text: "Creator is buying the product & uploading the order screenshot" };
     if (s === "ordered") return { who: "employee", text: "Check the order screenshot — Approve or Reject the order" };
     if (s === "order_approved" || s === "product_received" || s === "content_creation") return { who: "creator", text: "Creator is uploading the review screenshot" };
-    if (s === "submitted" || s === "review") {
+    // `review` means an employee already approved it here; only the payout is left.
+    if (s === "review") return { who: "employee", text: "Approved — verify in Submissions, then Approve & Pay" };
+    if (s === "submitted") {
       const { both, hasPurchase } = reimbursementProofs(app);
       if (both) return { who: "employee", text: "Check the order & review screenshots, then Approve or Reject" };
       return {
@@ -198,9 +200,9 @@ function matchesAction(a: Application, key: ActionKey): boolean {
     case "order_screenshot":
       return type === "reimbursement" && s === "ordered";
     case "review_recording":
-      return nextAction(a).who === "employee" && (s === "submitted" || s === "review") && reviewPending(a);
+      return nextAction(a).who === "employee" && s === "submitted" && reviewPending(a);
     case "seller_feedback":
-      return hasSellerFeedback(a) && reviewPending(a);
+      return hasSellerFeedback(a) && s === "submitted" && reviewPending(a);
     case "creators_applied":
       return s === "applied";
     case "barter_approval":
