@@ -142,8 +142,8 @@ export default function ApplicationReview() {
   const [reviewDays, setReviewDays] = useState("");
   const [reviewHours, setReviewHours] = useState("");
   const [reviewMinutes, setReviewMinutes] = useState("");
-  const [detailsLoaded, setDetailsLoaded] = useState(false);
-  if (app && !detailsLoaded) {
+  const [detailsLoadedFor, setDetailsLoadedFor] = useState<string | null>(null);
+  if (app && detailsLoadedFor !== id) {
     setOrderId(app.order_id ?? "");
     setOrderAmount(
       app.purchase_amount != null
@@ -169,7 +169,7 @@ export default function ApplicationReview() {
       setReviewHours(hh ? String(hh) : "");
       setReviewMinutes(mm ? String(mm) : "");
     }
-    setDetailsLoaded(true);
+    setDetailsLoadedFor(id ?? null);
   }
 
   const { data: sellers } = useQuery({ queryKey: ["sellers-for-review"], queryFn: fetchSellers });
@@ -184,36 +184,43 @@ export default function ApplicationReview() {
     }
   };
 
+  // Writes whatever is currently typed into the Order details form. Approve /
+  // reject run this first so a decision never discards the reviewer's edits.
+  const persistDetails = async () => {
+    if (detailsLoadedFor !== id) return;
+    const parsedAmount = orderAmount.trim() === "" ? null : Number(orderAmount);
+    const parsedCashback = cashbackAmount.trim() === "" ? null : Number(cashbackAmount);
+    const patch = {
+      order_id: orderId.trim() || null,
+      purchase_amount: parsedAmount,
+      order_date: orderDate.trim() || null,
+      expected_delivery_at: deliveryDate.trim() || null,
+      payout_amount: parsedCashback,
+      seller_feedback: sellerFeedback.trim() || null,
+    };
+    const { error } = await supabase.from("applications").update(patch).eq("id", id);
+    if (error) throw error;
+    if (app?.submissions?.[0]?.id) {
+      const { error: subErr } = await supabase
+        .from("campaign_submissions")
+        .update({ order_amount: parsedAmount })
+        .eq("id", app.submissions[0].id);
+      if (subErr) throw subErr;
+    }
+    // Assign / change the seller on the parent campaign so the order becomes
+    // visible to that seller (visibility is campaign-level).
+    if (app?.campaign_id && (sellerId || null) !== (app.campaign?.seller_id ?? null)) {
+      const { error: cErr } = await supabase
+        .from("campaigns")
+        .update({ seller_id: sellerId || null })
+        .eq("id", app.campaign_id);
+      if (cErr) throw cErr;
+    }
+  };
+
   const saveDetails = useMutation({
     mutationFn: async () => {
-      const parsedAmount = orderAmount.trim() === "" ? null : Number(orderAmount);
-      const parsedCashback = cashbackAmount.trim() === "" ? null : Number(cashbackAmount);
-      const patch = {
-        order_id: orderId.trim() || null,
-        purchase_amount: parsedAmount,
-        order_date: orderDate.trim() || null,
-        expected_delivery_at: deliveryDate.trim() || null,
-        payout_amount: parsedCashback,
-        seller_feedback: sellerFeedback.trim() || null,
-      };
-      const { error } = await supabase.from("applications").update(patch).eq("id", id);
-      if (error) throw error;
-      if (app?.submissions?.[0]?.id) {
-        const { error: subErr } = await supabase
-          .from("campaign_submissions")
-          .update({ order_amount: parsedAmount })
-          .eq("id", app.submissions[0].id);
-        if (subErr) throw subErr;
-      }
-      // Assign / change the seller on the parent campaign so the order becomes
-      // visible to that seller (visibility is campaign-level).
-      if (app?.campaign_id && (sellerId || null) !== (app.campaign?.seller_id ?? null)) {
-        const { error: cErr } = await supabase
-          .from("campaigns")
-          .update({ seller_id: sellerId || null })
-          .eq("id", app.campaign_id);
-        if (cErr) throw cErr;
-      }
+      await persistDetails();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["application-review", id] });
@@ -225,6 +232,7 @@ export default function ApplicationReview() {
 
   const orderApproval = useMutation({
     mutationFn: async ({ approve, minutes, reject_reason }: { approve: boolean; minutes?: number; reject_reason?: string }) => {
+      await persistDetails();
       const now = new Date();
       const patch: Record<string, unknown> = approve
         ? {
@@ -247,6 +255,7 @@ export default function ApplicationReview() {
 
   const update = useMutation({
     mutationFn: async ({ status, reject_reason }: { status: "review" | "rejected"; reject_reason?: string }) => {
+      await persistDetails();
       const patch: Record<string, unknown> = { status };
       if (reject_reason !== undefined) patch.reject_reason = reject_reason;
       const { error } = await supabase.from("applications").update(patch).eq("id", id);
