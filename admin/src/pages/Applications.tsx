@@ -789,6 +789,12 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
 
   const subWithApp = { ...sub, application: app } as CampaignSubmission;
   const paid = app.status === "completed";
+  // The review page approves by advancing the application without touching
+  // review_status, so treat a passed review gate as approved here too.
+  const gatePassed = app.status === "review" || app.status === "payment_in_progress" || paid;
+  const contentApproved = sub.review_status === "approved" || gatePassed;
+  const awaitingReview = sub.review_status === "pending" && !gatePassed;
+  const statusLabel = sub.review_status !== "pending" ? sub.review_status : paid ? "paid" : "awaiting payout";
 
   return (
     <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3">
@@ -797,7 +803,7 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
-        {sub.review_status === "pending" && (
+        {awaitingReview && (
           <>
             <Button variant="success" size="sm" onClick={() => review.mutate("approved")} disabled={review.isPending}>Approve</Button>
             <Button variant="outline" size="sm" onClick={() => review.mutate("revision")} disabled={review.isPending}>Revision</Button>
@@ -807,7 +813,7 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
             )}
           </>
         )}
-        {sub.review_status === "approved" && isAdmin && (
+        {contentApproved && isAdmin && (
           paid ? (
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600"><IndianRupee size={12} /> Paid</span>
           ) : (
@@ -817,8 +823,8 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
             </>
           )
         )}
-        {sub.review_status !== "pending" && (
-          <Badge variant={sub.review_status === "approved" ? "success" : sub.review_status === "rejected" ? "danger" : "info"}>{sub.review_status}</Badge>
+        {!awaitingReview && (
+          <Badge variant={contentApproved ? "success" : sub.review_status === "rejected" ? "danger" : "info"}>{statusLabel}</Badge>
         )}
       </div>
 
