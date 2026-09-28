@@ -453,9 +453,9 @@ export default function Applications() {
                 {t === "reimbursement" ? (
                   <>
                     <div className="mt-4 grid grid-cols-3 gap-1 border-t border-slate-100 pt-3">
-                      <StatTile label="Order Screenshot" value={cnt(t, (a) => a.status === "ordered")} onClick={() => jump("order_screenshot", t)} />
-                      <StatTile label="Review Submission Recording" value={cnt(t, (a) => nextAction(a).who === "employee" && (a.status === "submitted" || a.status === "review") && reviewPending(a))} onClick={() => jump("review_recording", t)} />
-                      <StatTile label="Seller Feedback Screenshot" value={cnt(t, (a) => hasSellerFeedback(a) && reviewPending(a))} onClick={() => jump("seller_feedback", t)} />
+                      <StatTile label="Order Screenshot" value={cnt(t, (a) => matchesAction(a, "order_screenshot"))} onClick={() => jump("order_screenshot", t)} />
+                      <StatTile label="Review Submission Recording" value={cnt(t, (a) => matchesAction(a, "review_recording"))} onClick={() => jump("review_recording", t)} />
+                      <StatTile label="Seller Feedback Screenshot" value={cnt(t, (a) => matchesAction(a, "seller_feedback"))} onClick={() => jump("seller_feedback", t)} />
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-1 border-t border-slate-100 pt-3">
                       <StatTile label="Creators Applied" value={cnt(t, (a) => a.status === "applied")} tone="rose" onClick={() => jump("creators_applied", t)} />
