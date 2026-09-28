@@ -1,17 +1,14 @@
 import { useState } from "react";
-import { Alert, Image, Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { colors } from "../lib/theme";
 import type { SampleProof } from "../lib/samples";
 
 function SampleViewer({ sample, onClose }: { sample: SampleProof | null; onClose: () => void }) {
-  const openVideo = async () => {
-    if (!sample?.videoUrl) {
-      Alert.alert("Sample coming soon", "The sample video will be available shortly.");
-      return;
-    }
-    await Linking.openURL(sample.videoUrl);
-  };
+  const player = useVideoPlayer(sample?.video ?? null, (p) => {
+    p.loop = true;
+  });
 
   return (
     <Modal visible={!!sample} transparent animationType="fade" onRequestClose={onClose}>
@@ -31,21 +28,20 @@ function SampleViewer({ sample, onClose }: { sample: SampleProof | null; onClose
           </View>
 
           <ScrollView contentContainerStyle={{ padding: 20 }}>
-            {sample ? (
+            {sample?.video ? (
+              <VideoView
+                player={player}
+                style={{ width: "100%", height: 460, borderRadius: 16, backgroundColor: "#000" }}
+                contentFit="contain"
+                allowsFullscreen
+                nativeControls
+              />
+            ) : sample?.image ? (
               <Image
                 source={sample.image}
                 className="h-[460px] w-full rounded-2xl bg-canvas"
                 resizeMode="contain"
               />
-            ) : null}
-            {sample?.videoUrl !== undefined ? (
-              <Pressable
-                onPress={openVideo}
-                className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl bg-ink py-4"
-              >
-                <Ionicons name="play-circle" size={20} color="#fff" />
-                <Text className="text-sm font-bold text-white">Play sample video</Text>
-              </Pressable>
             ) : null}
           </ScrollView>
         </View>
@@ -64,13 +60,13 @@ export function SampleProofChip({ sample }: { sample: SampleProof }) {
         className="flex-row items-center gap-1.5 self-start rounded-full bg-primary-50 px-3 py-1.5"
       >
         <Ionicons
-          name={sample.videoUrl !== undefined ? "play-circle-outline" : "eye-outline"}
+          name={sample.video ? "play-circle-outline" : "eye-outline"}
           size={14}
           color={colors.primary}
         />
         <Text className="text-xs font-bold text-primary">See sample</Text>
       </Pressable>
-      <SampleViewer sample={open ? sample : null} onClose={() => setOpen(false)} />
+      {open ? <SampleViewer sample={sample} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }
@@ -99,15 +95,16 @@ export function SampleProofGallery({
             className="w-32 overflow-hidden rounded-2xl border border-primary-100 bg-white"
           >
             <View className="relative">
-              <Image source={sample.image} className="h-32 w-full bg-canvas" resizeMode="cover" />
+              {sample.image ? (
+                <Image source={sample.image} className="h-32 w-full bg-canvas" resizeMode="cover" />
+              ) : (
+                <View className="h-32 w-full items-center justify-center bg-ink">
+                  <Ionicons name="play-circle" size={38} color="#fff" />
+                </View>
+              )}
               <View className="absolute left-2 top-2 h-5 w-5 items-center justify-center rounded-full bg-ink">
                 <Text className="text-[10px] font-bold text-white">{index + 1}</Text>
               </View>
-              {sample.videoUrl !== undefined ? (
-                <View className="absolute inset-0 items-center justify-center">
-                  <Ionicons name="play-circle" size={34} color="#fff" />
-                </View>
-              ) : null}
             </View>
             <Text className="px-2 py-2 text-[11px] font-semibold text-ink" numberOfLines={2}>
               {sample.title}
@@ -115,7 +112,7 @@ export function SampleProofGallery({
           </Pressable>
         ))}
       </ScrollView>
-      <SampleViewer sample={active} onClose={() => setActive(null)} />
+      {active ? <SampleViewer sample={active} onClose={() => setActive(null)} /> : null}
     </View>
   );
 }
