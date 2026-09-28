@@ -376,7 +376,11 @@ export default function Applications() {
   const ofType = (t: CampaignType) => scoped.filter((a) => a.campaign?.campaign_type === t);
   const needAction = (t: CampaignType) => ofType(t).filter((a) => nextAction(a).who === "employee").length;
   const cnt = (t: CampaignType, fn: (a: Application) => boolean) => ofType(t).filter(fn).length;
-  const employeeFor = (t: CampaignType) => reviewerList.find((r) => (r.review_types ?? []).includes(t))?.full_name ?? null;
+  // Reimbursement is usually split across several reviewers, so list them all.
+  const employeesFor = (t: CampaignType) =>
+    reviewerList
+      .filter((r) => (r.review_types ?? []).includes(t))
+      .map((r) => r.full_name?.trim() || "Unnamed");
 
   const jump = (key: ActionKey, t: CampaignType) => {
     setTypeFilter(t);
@@ -436,7 +440,7 @@ export default function Applications() {
           {ALL_TYPES.filter((t) => isAdmin || myTypes.includes(t)).map((t) => {
             const st = CARD_STYLE[t];
             const Icon = st.icon;
-            const emp = employeeFor(t);
+            const emp = employeesFor(t);
             return (
               <div key={t} className={"rounded-2xl border bg-white p-4 " + st.ring}>
                 <div className="flex items-start justify-between">
@@ -446,9 +450,16 @@ export default function Applications() {
                     </span>
                     <div>
                       <p className="text-base font-bold text-ink">{TYPE_LABEL[t]}</p>
-                      <p className="text-[11px] text-slate-400">
-                        Employee: <span className={"rounded-md px-1.5 py-0.5 font-semibold " + st.badge}>{emp ?? "Unassigned"}</span>
-                      </p>
+                      <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+                        <span>{emp.length > 1 ? "Employees:" : "Employee:"}</span>
+                        {emp.length ? (
+                          emp.map((name) => (
+                            <span key={name} className={"rounded-md px-1.5 py-0.5 font-semibold " + st.badge}>{name}</span>
+                          ))
+                        ) : (
+                          <span className={"rounded-md px-1.5 py-0.5 font-semibold " + st.badge}>Unassigned</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <button
