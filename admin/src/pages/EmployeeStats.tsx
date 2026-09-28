@@ -171,10 +171,14 @@ function creatorState(a: Application): EventState {
   if (a.status === "completed") return "approved";
   return "pending";
 }
-function reviewRecState(status: string | undefined): EventState {
+function reviewRecState(a: Application, status: string | undefined): EventState {
   if (status === "approved") return "approved";
   if (status === "rejected") return "rejected";
   if (status === "revision") return "revision";
+  // The review page approves by advancing the application without touching
+  // review_status, so fall back to the application once it's past that gate.
+  if (a.status === "rejected") return "rejected";
+  if (a.status === "review" || a.status === "completed") return "approved";
   return "pending";
 }
 
@@ -220,7 +224,7 @@ function deriveEvents(apps: Application[], assignMap: Map<string, string | null>
     // Review recording: the content submission.
     if (sub) {
       const owner = sub.reviewed_by ?? sub.claimed_by ?? actor ?? "";
-      push("review_rec", reviewRecState(sub.review_status), owner || UNASSIGNED, sub.reviewed_at ?? sub.created_at);
+      push("review_rec", reviewRecState(a, sub.review_status), owner || UNASSIGNED, sub.reviewed_at ?? sub.created_at);
     }
     // Seller feedback.
     const sellerFb = !!a.seller_feedback || !!sub?.seller_feedback_screenshot || !!sub?.seller_feedback_video;
