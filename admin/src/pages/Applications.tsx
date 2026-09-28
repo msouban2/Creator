@@ -420,7 +420,18 @@ export default function Applications() {
 
       {/* Application overview */}
       <div className="rounded-2xl border border-slate-100 bg-white p-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">Application overview</p>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Application overview</p>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Refresh counts"
+            className="flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-ink disabled:opacity-60"
+          >
+            <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
         <div className="grid gap-3 lg:grid-cols-3">
           {ALL_TYPES.filter((t) => isAdmin || myTypes.includes(t)).map((t) => {
             const st = CARD_STYLE[t];
