@@ -1,5 +1,7 @@
 import * as WebBrowser from "expo-web-browser";
 import { createURL } from "expo-linking";
+import * as AppleAuthentication from "expo-apple-authentication";
+import * as Crypto from "expo-crypto";
 import { supabase } from "../lib/supabase";
 
 export interface SignUpPayload {
@@ -112,6 +114,50 @@ export async function signInWithGoogle() {
   const errorDescription =
     url.searchParams.get("error_description") ?? hashParams.get("error_description");
   if (errorDescription) throw new Error(errorDescription);
+}
+
+export async function signInWithApple() {
+  const rawNonce = Crypto.randomUUID();
+  const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+    ],
+    nonce: hashedNonce,
+  });
+
+  if (!credential.identityToken) throw new Error("Apple did not return an identity token.");
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: "apple",
+    token: credential.identityToken,
+    nonce: rawNonce,
+  });
+  if (error) throw error;
+
+  const fullName = [
+    credential.fullName?.givenName,
+    credential.fullName?.middleName,
+    credential.fullName?.familyName,
+  ].filter(Boolean).join(" ");
+  if (fullName) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.auth.updateUser({ data: { full_name: fullName } });
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName } as never)
+        .eq("id", user.id);
+      if (profileError) throw profileError;
+    }
+  }
+}
+
+export async function deleteAccount(appleAuthorizationCode?: string) {
+  const { error } = await supabase.functions.invoke("delete-account", {
+    body: { appleAuthorizationCode },
+  });
+  if (error) throw new Error(error.message || "Couldn't delete your account. Please try again.");
 }
 
 export async function sendPasswordReset(email: string) {

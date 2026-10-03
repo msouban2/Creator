@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
+import * as AppleAuthentication from "expo-apple-authentication";
+import * as Crypto from "expo-crypto";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Avatar } from "../../src/components/Avatar";
@@ -12,6 +14,7 @@ import { useAuthStore } from "../../src/store/auth";
 import { useProfileStats, useUpdateProfile } from "../../src/api/profile";
 import { colors } from "../../src/lib/theme";
 import { compactNumber, formatCurrency } from "../../src/lib/format";
+import { deleteAccount } from "../../src/api/auth";
 
 function Stat({ icon, value, label }: { icon: keyof typeof Ionicons.glyphMap; value: string | number; label: string }) {
   return (
@@ -48,6 +51,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const profile = useAuthStore((s) => s.profile);
+  const session = useAuthStore((s) => s.session);
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const signOut = useAuthStore((s) => s.signOut);
   const { data: stats, refetch: refetchStats } = useProfileStats();
@@ -71,6 +75,7 @@ export default function ProfileScreen() {
   const updateProfile = useUpdateProfile();
   const [niches, setNiches] = useState<string[]>(profile?.niches ?? []);
   const [editingNiches, setEditingNiches] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const nicheChangesUsed = profile?.niches_change_count ?? 0;
   const nicheChangesLeft = Math.max(0, NICHE_CHANGE_LIMIT - nicheChangesUsed);
   const nichesLocked = nicheChangesLeft <= 0;
@@ -124,6 +129,47 @@ export default function ProfileScreen() {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
       { text: "Logout", style: "destructive", onPress: () => signOut() },
+    ]);
+  };
+
+  const confirmDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      const appleLinked =
+        session?.user.identities?.some((identity) => identity.provider === "apple") ||
+        session?.user.app_metadata?.providers?.includes("apple");
+      let appleAuthorizationCode: string | undefined;
+      if (appleLinked) {
+        if (Platform.OS !== "ios") {
+          throw new Error("Delete this account from an iPhone or iPad to revoke Sign in with Apple.");
+        }
+        const state = Crypto.randomUUID();
+        const credential = await AppleAuthentication.signInAsync({ state });
+        if (credential.state !== state) throw new Error("Apple authorization could not be verified.");
+        if (!credential.authorizationCode) throw new Error("Apple did not return an authorization code.");
+        appleAuthorizationCode = credential.authorizationCode;
+      }
+
+      await deleteAccount(appleAuthorizationCode);
+      await signOut();
+      router.replace("/(auth)/login");
+    } catch (e: any) {
+      Alert.alert("Couldn't delete account", e.message ?? "Please try again.");
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const onDeleteAccount = () => {
+    const message = "This permanently deletes your account and associated personal data. This cannot be undone.";
+    if (Platform.OS === "web") {
+      const ok = typeof window !== "undefined" ? window.confirm(`${message}\n\nDelete your account?`) : false;
+      if (ok) void confirmDeleteAccount();
+      return;
+    }
+    Alert.alert("Delete account?", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete Account", style: "destructive", onPress: () => void confirmDeleteAccount() },
     ]);
   };
 
@@ -302,6 +348,14 @@ export default function ProfileScreen() {
       <Pressable onPress={onLogout} className="mx-5 mt-4 flex-row items-center justify-center gap-2 rounded-2xl bg-primary-100 py-4">
           <Ionicons name="log-out-outline" size={20} color={colors.primary} />
           <Text className="text-base font-bold text-primary">Logout</Text>
+        </Pressable>
+        <Pressable
+          onPress={onDeleteAccount}
+          disabled={deletingAccount}
+          className="mx-5 mt-3 flex-row items-center justify-center gap-2 rounded-2xl border border-red-200 bg-white py-4"
+        >
+          <Ionicons name="trash-outline" size={18} color="#C62828" />
+          <Text className="text-sm font-bold text-red-700">{deletingAccount ? "Deleting Account..." : "Delete Account"}</Text>
         </Pressable>
       </ScrollView>
 
