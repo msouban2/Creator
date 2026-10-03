@@ -478,11 +478,13 @@ export default function CampaignDetail() {
               Brand: {campaign.brand_name}
               {campaign.asin ? ` · ASIN: ${campaign.asin}` : ""}
             </p>
-            <div className="mt-2 inline-flex rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary">
-              {isReimb ? `Cashback up to ${formatCurrency(campaign.cashback_percentage)}` :
-                campaign.campaign_type === "barter" ? `Product worth ${formatCurrency(campaign.reward_amount)}` :
-                `Payout up to ${formatCurrency(campaign.reward_amount)}`}
-            </div>
+            {!isReimb ? (
+              <div className="mt-2 inline-flex rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary">
+                {campaign.campaign_type === "barter"
+                  ? `Product worth ${formatCurrency(campaign.reward_amount)}`
+                  : `Payout up to ${formatCurrency(campaign.reward_amount)}`}
+              </div>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
               <span>Posted: <b className="text-slate-600">{formatDate(campaign.created_at)}</b></span>
               {campaign.application_deadline ? <span>Application deadline: <b className="text-slate-600">{formatDate(campaign.application_deadline)}</b></span> : null}
