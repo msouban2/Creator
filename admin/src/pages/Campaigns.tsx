@@ -20,6 +20,13 @@ const TYPE_VARIANT: Record<CampaignType, "info" | "warning" | "success"> = {
   barter: "warning",
   paid: "success",
 };
+const DELIVERABLE_OPTIONS = [
+  "Review submission",
+  "Review submission and seller feedback",
+  "Rating submission",
+  "Rating and seller feedback",
+  "Only order",
+] as const;
 const STATUS_VARIANT: Record<string, "success" | "default" | "danger"> = {
   active: "success",
   draft: "default",
@@ -1032,7 +1039,15 @@ export default function Campaigns() {
             </div>
             <div>
               <Label>Deliverables</Label>
-              <Textarea value={form.deliverables ?? ""} onChange={(e) => set("deliverables", e.target.value)} placeholder="1 Reel + 2 Stories" />
+              <Select value={form.deliverables ?? ""} onChange={(e) => set("deliverables", e.target.value)}>
+                <option value="">Select deliverables…</option>
+                {form.deliverables && !DELIVERABLE_OPTIONS.includes(form.deliverables as (typeof DELIVERABLE_OPTIONS)[number]) && (
+                  <option value={form.deliverables}>Current: {form.deliverables}</option>
+                )}
+                {DELIVERABLE_OPTIONS.map((deliverable) => (
+                  <option key={deliverable} value={deliverable}>{deliverable}</option>
+                ))}
+              </Select>
             </div>
             <div>
               <Label>Instructions</Label>
