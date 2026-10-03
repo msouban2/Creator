@@ -20,13 +20,13 @@ const TYPE_VARIANT: Record<CampaignType, "info" | "warning" | "success"> = {
   barter: "warning",
   paid: "success",
 };
-const FIXED_DELIVERABLES = [
-  "review submission",
-  "review submission and seller feedback",
-  "rating submission",
-  "rating and sellerfeedback",
-  "only order",
-].join("\n");
+const DELIVERABLE_OPTIONS = [
+  "Review submission",
+  "Review submission and seller feedback",
+  "Rating submission",
+  "Rating and seller feedback",
+  "Only order",
+] as const;
 const STATUS_VARIANT: Record<string, "success" | "default" | "danger"> = {
   active: "success",
   draft: "default",
@@ -157,7 +157,7 @@ const EMPTY: FormState = {
   campaign_type: "reimbursement",
   campaign_image: "",
   description: "",
-  deliverables: FIXED_DELIVERABLES,
+  deliverables: "",
   instructions: "",
   category: "Fashion",
   min_followers: 0,
@@ -459,7 +459,7 @@ export default function Campaigns() {
         campaign_type: payload.campaign_type,
         campaign_image: payload.campaign_image || null,
         description: payload.description || null,
-        deliverables: FIXED_DELIVERABLES,
+        deliverables: payload.deliverables || null,
         instructions: payload.instructions || null,
         category: payload.category || null,
         min_followers: Number(payload.min_followers) || 0,
@@ -1039,12 +1039,15 @@ export default function Campaigns() {
             </div>
             <div>
               <Label>Deliverables</Label>
-              <Textarea
-                value={FIXED_DELIVERABLES}
-                disabled
-                rows={5}
-                className="cursor-not-allowed border-slate-300 bg-slate-200 text-slate-600 opacity-100"
-              />
+              <Select value={form.deliverables ?? ""} onChange={(e) => set("deliverables", e.target.value)}>
+                <option value="">Select deliverables…</option>
+                {form.deliverables && !DELIVERABLE_OPTIONS.includes(form.deliverables as (typeof DELIVERABLE_OPTIONS)[number]) && (
+                  <option value={form.deliverables}>Current value (custom)</option>
+                )}
+                {DELIVERABLE_OPTIONS.map((deliverable) => (
+                  <option key={deliverable} value={deliverable}>{deliverable}</option>
+                ))}
+              </Select>
             </div>
             <div>
               <Label>Instructions</Label>
