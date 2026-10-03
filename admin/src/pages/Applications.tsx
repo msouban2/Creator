@@ -202,7 +202,7 @@ function matchesAction(a: Application, key: ActionKey): boolean {
     case "need_actions":
       return nextAction(a).who === "employee";
     case "order_screenshot":
-      return type === "reimbursement" && s === "ordered";
+      return type === "reimbursement" && !!a.purchase_proof;
     case "approved_orders":
       return type === "reimbursement" && s === "order_approved";
     case "review_recording":
