@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Select, Label } from "@/components/ui/input";
 import { Badge, Modal } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { campaignCode, formatCurrency, formatDate } from "@/lib/utils";
 
 const TYPE_LABEL: Record<CampaignType, string> = {
   reimbursement: "Reimbursement",
@@ -224,15 +224,6 @@ function platformFromUrl(url: string | null | undefined): string | null {
   if (/meesho\./.test(u)) return "Meesho";
   if (/ajio\./.test(u)) return "Ajio";
   return null;
-}
-
-// Human-friendly campaign code — uses the stored code, else auto-generates one
-// from the type prefix, year and a short slice of the id (stable per campaign).
-function campaignCode(c: Campaign): string {
-  if (c.campaign_code && c.campaign_code.trim()) return c.campaign_code.trim();
-  const prefix = c.campaign_type === "barter" ? "BR" : c.campaign_type === "paid" ? "PD" : "RB";
-  const year = new Date(c.created_at).getFullYear();
-  return `${prefix}${year}-${c.id.replace(/-/g, "").slice(0, 5).toUpperCase()}`;
 }
 
 // Build a CSV from rows of objects and trigger a download (opens in Excel).
@@ -577,14 +568,22 @@ export default function Campaigns() {
         status: payload.status ?? "draft",
         seller_id: payload.seller_id || null,
         seller_name: payload.seller_name?.trim() || null,
-        campaign_code: payload.campaign_code?.trim() || null,
+        campaign_code: payload.campaign_code?.trim() || (payload.id ? campaignCode(payload as Campaign) : null),
       };
       if (payload.id) {
         const { error } = await supabase.from("campaigns").update(record).eq("id", payload.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("campaigns").insert(record);
+        const { data: created, error } = await supabase.from("campaigns").insert(record).select("*").single();
         if (error) throw error;
+        if (created && !record.campaign_code) {
+          const generatedCode = campaignCode(created as Campaign);
+          const { error: codeError } = await supabase
+            .from("campaigns")
+            .update({ campaign_code: generatedCode })
+            .eq("id", created.id);
+          if (codeError) throw codeError;
+        }
       }
     },
     onSuccess: () => {
@@ -780,6 +779,7 @@ export default function Campaigns() {
                         {(c.platform || platformFromUrl(c.product_url)) ? <>Platform: <span className="text-slate-600">{c.platform || platformFromUrl(c.product_url)}</span> · </> : null}
                         Brand: <span className="text-slate-600">{c.brand_name || "—"}</span>
                         {c.asin ? <> · ASIN: <span className="font-mono text-slate-600">{c.asin}</span></> : null}
+                        {" · "}Campaign Code: <span className="font-mono text-slate-600">{campaignCode(c)}</span>
                       </>
                     ) : (
                       <>

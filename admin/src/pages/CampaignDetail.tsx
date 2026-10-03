@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { signedUrl } from "@/lib/storage";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { campaignCode, formatCurrency, formatDate } from "@/lib/utils";
 import { statusLabel } from "@/lib/workflow";
 
 const TYPE_LABEL: Record<string, string> = { reimbursement: "Reimbursement", barter: "Barter", paid: "Paid" };
@@ -477,6 +477,9 @@ export default function CampaignDetail() {
             <p className="text-sm text-slate-500">
               Brand: {campaign.brand_name}
               {campaign.asin ? ` · ASIN: ${campaign.asin}` : ""}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Campaign Code: <span className="font-mono font-semibold text-slate-700">{campaignCode(campaign)}</span>
             </p>
             {!isReimb ? (
               <div className="mt-2 inline-flex rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold text-primary">
