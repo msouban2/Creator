@@ -27,6 +27,29 @@ const DELIVERABLE_OPTIONS = [
   "Rating and seller feedback",
   "Only order",
 ] as const;
+const REIMBURSEMENT_INSTRUCTIONS = [
+  "📦 Reimbursement Campaign — Steps to Follow",
+  "",
+  "STEP 1 — Open Product Link\nClick on the provided product link and open the product page.",
+  "",
+  "STEP 2 — Place Your Order\nOrder the product as instructed. After placing the order, take a clear screenshot of your order confirmation.",
+  "",
+  "STEP 3 — Upload Order Screenshot\nUpload your order screenshot in the Bilkul App.",
+  "",
+  "STEP 4 — Receive the Product\nWait for the product to be delivered. Keep the product and packaging safe until all campaign requirements are completed.",
+  "",
+  "STEP 5 — Use the Product\nUse/test the product properly so you can share your genuine experience.",
+  "",
+  "STEP 6 — Submit an Honest Review\nPost a review based on your actual experience with the product. If naturally relevant to your experience, you may discuss aspects such as:\n\nUse / usability\nDurability\nQuality\nAffordability\nValue for money",
+  "",
+  "STEP 7 — Record Review Proof\nRecord a clear video showing that you have submitted your review and upload the recording in the Bilkul App.",
+  "",
+  "STEP 8 — Seller Feedback\nProvide honest and experience-based seller feedback as required by the campaign.",
+  "",
+  "STEP 9 — Instagram Tag (Optional)\nIf you wish, tag our Instagram account in your post/story. This is completely optional.",
+  "",
+  "⚠️ Important: Reviews and seller feedback must reflect your genuine experience. Do not copy another person's review or make claims about the product that you have not personally experienced.",
+].join("\n");
 const STATUS_VARIANT: Record<string, "success" | "default" | "danger"> = {
   active: "success",
   draft: "default",
@@ -460,7 +483,10 @@ export default function Campaigns() {
         campaign_image: payload.campaign_image || null,
         description: payload.description || null,
         deliverables: payload.deliverables || null,
-        instructions: payload.instructions || null,
+        instructions:
+          payload.campaign_type === "reimbursement"
+            ? REIMBURSEMENT_INSTRUCTIONS
+            : payload.instructions || null,
         category: payload.category || null,
         min_followers: Number(payload.min_followers) || 0,
         max_followers: payload.max_followers ? Number(payload.max_followers) : null,
@@ -1051,7 +1077,16 @@ export default function Campaigns() {
             </div>
             <div>
               <Label>Instructions</Label>
-              <Textarea value={form.instructions ?? ""} onChange={(e) => set("instructions", e.target.value)} placeholder="Tag @brand, use #hashtag…" />
+              {form.campaign_type === "reimbursement" ? (
+                <Textarea
+                  value={REIMBURSEMENT_INSTRUCTIONS}
+                  disabled
+                  rows={18}
+                  className="cursor-not-allowed border-slate-300 bg-slate-200 text-slate-600 opacity-100"
+                />
+              ) : (
+                <Textarea value={form.instructions ?? ""} onChange={(e) => set("instructions", e.target.value)} placeholder="Tag @brand, use #hashtag…" />
+              )}
             </div>
 
             {form.campaign_type !== "reimbursement" && (
