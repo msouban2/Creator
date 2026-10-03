@@ -953,7 +953,7 @@ export default function ReviewQueue() {
                 <p className="mb-1 text-sm font-semibold text-ink">Campaign &amp; product</p>
                 <div className="divide-y divide-slate-100">
                   <Detail icon={Package} label="Brand">{current.application?.campaign?.brand_name ?? "—"}</Detail>
-                  <Detail icon={Package} label="Product">{current.application?.campaign?.product_name ?? "—"}</Detail>
+                  <Detail icon={Package} label="Product">{current.application?.campaign?.product_name || current.application?.campaign?.title || "—"}</Detail>
                   <Detail icon={Hash} label="Expected ASIN">
                     {current.application?.campaign?.asin ? (
                       <span className="font-mono">{current.application.campaign.asin}</span>

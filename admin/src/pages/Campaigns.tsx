@@ -563,7 +563,7 @@ export default function Campaigns() {
           : null,
         // product link is only used for reimbursement (creator buys it)
         product_url: payload.campaign_type === "reimbursement" ? payload.product_url || null : null,
-        product_name: payload.product_name || null,
+        product_name: payload.product_name?.trim() || payload.title?.trim() || null,
         platform: payload.platform?.trim() || null,
         // expected ASIN — used across types so staff can match the purchased product
         asin: payload.asin?.trim() || null,

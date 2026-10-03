@@ -364,20 +364,24 @@ export default function ApplicationReview() {
             </CardContent>
           </Card>
 
-          {app.delivery_photo_url ? (
+          {isReimbursement || app.delivery_photo_url ? (
             <Card>
               <CardContent className="p-4">
-                <p className="mb-2 text-sm font-semibold text-ink">Delivered photo</p>
-                {deliveryUrl ? (
+                <p className="mb-2 text-sm font-semibold text-ink">Delivered screenshot</p>
+                {app.delivery_photo_url ? deliveryUrl ? (
                   <button onClick={() => setPreview(deliveryUrl)} className="block w-full">
                     <img
                       src={deliveryUrl}
-                      alt="delivered product"
+                      alt="delivered-date screenshot"
                       className="max-h-[420px] w-full rounded-xl object-contain ring-1 ring-slate-200"
                     />
                   </button>
                 ) : (
                   <p className="text-sm text-slate-400">Loading…</p>
+                ) : (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    Creator hasn&apos;t uploaded the delivered screenshot yet.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -470,7 +474,7 @@ export default function ApplicationReview() {
             <CardContent className="p-4">
               <p className="mb-1 text-sm font-semibold text-ink">Campaign &amp; product</p>
               <div className="divide-y divide-slate-100">
-                <Detail icon={Package} label="Product name">{c?.product_name ?? "—"}</Detail>
+                <Detail icon={Package} label="Product name">{c?.product_name || c?.title || "—"}</Detail>
                 <Detail icon={Package} label="Brand">{c?.brand_name ?? "—"}</Detail>
                 {c?.platform ? (
                   <Detail icon={Package} label="Platform">{c.platform}</Detail>
@@ -538,6 +542,12 @@ export default function ApplicationReview() {
                     <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
                       Creator cashback will equal the verified order amount.
                     </p>
+                    <div className="flex justify-end">
+                      <Button size="sm" disabled={saveDetails.isPending} onClick={() => saveDetails.mutate()}>
+                        {saveDetails.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                        {saveDetails.isSuccess && !saveDetails.isPending ? "Saved ✓" : "Save order details"}
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   <div className="divide-y divide-slate-100">
@@ -596,12 +606,6 @@ export default function ApplicationReview() {
                   rows={2}
                   placeholder="Notes for the brand about this order…"
                 />
-              </div>
-              <div className="flex justify-end">
-                <Button size="sm" disabled={saveDetails.isPending} onClick={() => saveDetails.mutate()}>
-                  {saveDetails.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
-                  {saveDetails.isSuccess && !saveDetails.isPending ? "Saved ✓" : "Save details"}
-                </Button>
               </div>
             </CardContent>
           </Card>
