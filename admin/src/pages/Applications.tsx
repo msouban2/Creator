@@ -14,6 +14,7 @@ import { ReviewNotesThread } from "@/components/ReviewNotesThread";
 import { TurnPill, StageTracker } from "@/components/WorkflowUi";
 import { statusLabel, isCampaignClosed } from "@/lib/workflow";
 import { formatCurrency, formatDate, orderRef } from "@/lib/utils";
+import { invalidateReviewQueries } from "@/lib/reviewSync";
 import { ReleasePaymentModal, SendBackModal, REVIEW_TAGS } from "./Submissions";
 
 const ALL_TYPES: CampaignType[] = ["barter", "reimbursement", "paid"];
@@ -258,8 +259,17 @@ export default function Applications() {
     [isAdmin, profile?.review_types]
   );
 
-  const { data, isLoading, dataUpdatedAt, refetch, isFetching } = useQuery({ queryKey: ["applications"], queryFn: fetchApplications });
-  const { data: reviewers } = useQuery({ queryKey: ["app-reviewers"], queryFn: fetchReviewers, enabled: isAdmin });
+  const { data, isLoading, dataUpdatedAt, refetch, isFetching } = useQuery({
+    queryKey: ["applications"],
+    queryFn: fetchApplications,
+    refetchInterval: 15000,
+  });
+  const { data: reviewers } = useQuery({
+    queryKey: ["app-reviewers"],
+    queryFn: fetchReviewers,
+    enabled: isAdmin,
+    refetchInterval: 15000,
+  });
   const reviewerList: Reviewer[] = reviewers ?? [];
 
   // Applications manually assigned to this employee — they can access these even
@@ -275,6 +285,7 @@ export default function Applications() {
       if (error) throw error;
       return Array.from(new Set((data ?? []).map((r) => (r as { application_id: string }).application_id)));
     },
+    refetchInterval: 15000,
   });
 
   // Persist the chosen action tab + filters so returning from the review page
@@ -753,11 +764,7 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
       if (appErr) throw appErr;
       await logEvent(status === "approved" ? "Approved submission" : status === "revision" ? "Requested revision" : "Rejected submission");
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["applications"] });
-      qc.invalidateQueries({ queryKey: ["review-stats"] });
-      qc.invalidateQueries({ queryKey: ["reviewer-workload"] });
-    },
+    onSuccess: () => void invalidateReviewQueries(qc),
   });
 
   const tag = useMutation({
@@ -766,7 +773,7 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
       const { error } = await supabase.from("campaign_submissions").update({ review_tag }).eq("id", sub.id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["applications"] }),
+    onSuccess: () => void invalidateReviewQueries(qc),
   });
 
   const sendBack = useMutation({
@@ -790,8 +797,7 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
     },
     onSuccess: () => {
       setShowSendBack(false);
-      qc.invalidateQueries({ queryKey: ["applications"] });
-      qc.invalidateQueries({ queryKey: ["review-stats"] });
+      void invalidateReviewQueries(qc);
       qc.invalidateQueries({ queryKey: ["review-notes"] });
     },
   });
@@ -871,8 +877,7 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
           onClose={() => setShowPay(false)}
           onDone={() => {
             setShowPay(false);
-            qc.invalidateQueries({ queryKey: ["applications"] });
-            qc.invalidateQueries({ queryKey: ["review-stats"] });
+            void invalidateReviewQueries(qc);
           }}
         />
       )}

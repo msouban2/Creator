@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, Modal } from "@/components/ui/badge";
 import { Input, Textarea, Label, Select } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
+import { invalidateReviewQueries } from "@/lib/reviewSync";
 import { ReleasePaymentModal } from "./Submissions";
 
 async function fetchApplication(id: string) {
@@ -238,7 +239,7 @@ export default function ApplicationReview() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["application-review", id] });
-      qc.invalidateQueries({ queryKey: ["applications"] });
+      void invalidateReviewQueries(qc);
       qc.invalidateQueries({ queryKey: ["seller-applications"] });
       qc.invalidateQueries({ queryKey: ["campaigns"] });
     },
@@ -261,7 +262,7 @@ export default function ApplicationReview() {
       await logEvent(approve ? "Approved order" : `Rejected order${reject_reason ? ` — ${reject_reason}` : ""}`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["applications"] });
+      void invalidateReviewQueries(qc);
       qc.invalidateQueries({ queryKey: ["application-review", id] });
       navigate(backTo);
     },
@@ -295,7 +296,7 @@ export default function ApplicationReview() {
       await logEvent(status === "review" ? "Approved review" : `Rejected applicant${reject_reason ? ` — ${reject_reason}` : ""}`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["applications"] });
+      void invalidateReviewQueries(qc);
       qc.invalidateQueries({ queryKey: ["application-review", id] });
       navigate(backTo);
     },
@@ -323,7 +324,7 @@ export default function ApplicationReview() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["application-review", id] });
-      qc.invalidateQueries({ queryKey: ["applications"] });
+      void invalidateReviewQueries(qc);
     },
   });
 

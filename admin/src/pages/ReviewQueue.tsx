@@ -28,6 +28,7 @@ import { ReviewNotesThread } from "@/components/ReviewNotesThread";
 import { TurnPill, StageTracker } from "@/components/WorkflowUi";
 import { statusLabel, isCampaignClosed } from "@/lib/workflow";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { invalidateReviewQueries } from "@/lib/reviewSync";
 
 const ALL_TYPES: CampaignType[] = ["barter", "reimbursement", "paid"];
 const TYPE_LABEL: Record<CampaignType, string> = {
@@ -309,6 +310,7 @@ export default function ReviewQueue() {
     queryKey: ["review-queue-current", currentId],
     queryFn: () => fetchSubmission(currentId as string),
     enabled: !!currentId,
+    refetchInterval: 15000,
   });
 
   // Claim up to two lifecycle action items for me and show only those — an item
@@ -370,6 +372,7 @@ export default function ReviewQueue() {
       return (data ?? []) as unknown as ReportRow[];
     },
     enabled: showReport && isAdmin,
+    refetchInterval: 15000,
   });
 
   const updateApp = useMutation({
@@ -402,8 +405,7 @@ export default function ReviewQueue() {
     },
     onSuccess: () => {
       setActionIndex(0);
-      qc.invalidateQueries({ queryKey: ["review-action-queue"] });
-      qc.invalidateQueries({ queryKey: ["action-queue-depth"] });
+      void invalidateReviewQueries(qc);
     },
   });
 
@@ -426,8 +428,7 @@ export default function ReviewQueue() {
     },
     onSuccess: () => {
       setActionIndex(0);
-      qc.invalidateQueries({ queryKey: ["review-action-queue"] });
-      qc.invalidateQueries({ queryKey: ["action-queue-depth"] });
+      void invalidateReviewQueries(qc);
     },
   });
 
@@ -477,8 +478,7 @@ export default function ReviewQueue() {
       await logEvent(appId, subId, msg);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["submissions"] });
-      qc.invalidateQueries({ queryKey: ["review-stats"] });
+      void invalidateReviewQueries(qc);
       setCurrentId(null);
       claimNext.mutate();
     },
