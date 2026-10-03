@@ -215,6 +215,7 @@ export default function ApplicationReview() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["application-review", id] });
+      if (app?.campaign_id) qc.invalidateQueries({ queryKey: ["campaign-detail-apps", app.campaign_id] });
       void invalidateReviewQueries(qc);
       qc.invalidateQueries({ queryKey: ["seller-applications"] });
       qc.invalidateQueries({ queryKey: ["campaigns"] });
@@ -475,6 +476,7 @@ export default function ApplicationReview() {
               <p className="mb-1 text-sm font-semibold text-ink">Campaign &amp; product</p>
               <div className="divide-y divide-slate-100">
                 <Detail icon={Package} label="Product name">{c?.product_name || c?.title || "—"}</Detail>
+                <Detail icon={Hash} label="Campaign code">{c?.campaign_code || "—"}</Detail>
                 <Detail icon={Package} label="Brand">{c?.brand_name ?? "—"}</Detail>
                 {c?.platform ? (
                   <Detail icon={Package} label="Platform">{c.platform}</Detail>
