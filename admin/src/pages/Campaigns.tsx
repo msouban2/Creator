@@ -1039,43 +1039,49 @@ export default function Campaigns() {
             </div>
             <div>
               <Label>Deliverables</Label>
-              <Textarea value={FIXED_DELIVERABLES} readOnly rows={5} />
+              <Textarea
+                value={FIXED_DELIVERABLES}
+                disabled
+                rows={5}
+                className="cursor-not-allowed border-slate-300 bg-slate-200 text-slate-600 opacity-100"
+              />
             </div>
             <div>
               <Label>Instructions</Label>
               <Textarea value={form.instructions ?? ""} onChange={(e) => set("instructions", e.target.value)} placeholder="Tag @brand, use #hashtag…" />
             </div>
 
-            {/* Sample content shown to creators (all types) */}
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
-              <p className="mb-2 text-sm font-semibold text-ink">Sample content (shown to creators)</p>
-              <div>
-                <Label>Sample / Reference Video URL</Label>
-                <Input type="url" value={form.sample_video_url ?? ""} onChange={(e) => set("sample_video_url", e.target.value)} placeholder="https://… a reference reel creators can watch" />
-              </div>
-              <div className="mt-3">
-                <Label>Sample screenshots</Label>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  {(form.sample_screenshots ?? []).map((url, i) => (
-                    <div key={url + i} className="relative">
-                      <img src={url} alt="" className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200" />
-                      <button
-                        type="button"
-                        onClick={() => set("sample_screenshots", (form.sample_screenshots ?? []).filter((_, j) => j !== i))}
-                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-300 text-2xl text-slate-400 hover:border-primary hover:text-primary">
-                    +
-                    <input type="file" accept="image/*" multiple className="hidden" onChange={onSampleImages} />
-                  </label>
+            {form.campaign_type !== "reimbursement" && (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                <p className="mb-2 text-sm font-semibold text-ink">Sample content (shown to creators)</p>
+                <div>
+                  <Label>Sample / Reference Video URL</Label>
+                  <Input type="url" value={form.sample_video_url ?? ""} onChange={(e) => set("sample_video_url", e.target.value)} placeholder="https://… a reference reel creators can watch" />
                 </div>
-                <p className="mt-1 text-xs text-slate-400">Add example screenshots so creators know what content to make.</p>
+                <div className="mt-3">
+                  <Label>Sample screenshots</Label>
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {(form.sample_screenshots ?? []).map((url, i) => (
+                      <div key={url + i} className="relative">
+                        <img src={url} alt="" className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200" />
+                        <button
+                          type="button"
+                          onClick={() => set("sample_screenshots", (form.sample_screenshots ?? []).filter((_, j) => j !== i))}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-300 text-2xl text-slate-400 hover:border-primary hover:text-primary">
+                      +
+                      <input type="file" accept="image/*" multiple className="hidden" onChange={onSampleImages} />
+                    </label>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">Add example screenshots so creators know what content to make.</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ─── Section 3 · Finance ──────────────────────────────────── */}
