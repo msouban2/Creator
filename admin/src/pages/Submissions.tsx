@@ -894,19 +894,18 @@ export function ReleasePaymentModal({
 }) {
   const campaign = submission.application?.campaign;
   const purchaseAmt = submission.application?.purchase_amount;
-  // Reimbursement pays back the exact amount the creator paid (so the product
-  // is effectively free) plus the flat cashback bonus. Falls back to the
-  // campaign's product price if the creator's paid amount wasn't recorded.
-  const reimbursed = purchaseAmt != null ? Number(purchaseAmt) : Number(campaign?.reward_amount ?? 0);
-  const cashback = Number(campaign?.cashback_percentage ?? 0);
+  const isReimbursement = campaign?.campaign_type === "reimbursement";
+  const orderAmountMissing = isReimbursement && purchaseAmt == null;
   const defaultAmount =
-    campaign?.campaign_type === "reimbursement" ? reimbursed + cashback : Number(campaign?.reward_amount ?? 0);
+    isReimbursement
+      ? purchaseAmt != null ? Number(purchaseAmt) : 0
+      : Number(campaign?.reward_amount ?? 0);
   const [amount, setAmount] = useState(String(defaultAmount));
   const [error, setError] = useState<string | null>(null);
 
   const pay = useMutation({
     mutationFn: async () => {
-      const value = Number(amount);
+      const value = isReimbursement ? defaultAmount : Number(amount);
       if (!value || value <= 0) throw new Error("Enter a valid amount.");
       await supabase
         .from("applications")
@@ -937,35 +936,28 @@ export function ReleasePaymentModal({
         <div className="rounded-xl bg-slate-50 p-3 text-sm">
           <p className="font-semibold text-ink">{submission.application?.creator?.full_name}</p>
           <p className="text-slate-500">{submission.application?.campaign?.title}</p>
-          {campaign?.campaign_type === "reimbursement" ? (
-            <div className="mt-2 space-y-0.5 text-xs text-slate-500">
-              <div className="flex justify-between">
-                <span>Refund (what they paid)</span>
-                <span className="font-semibold text-ink">{formatCurrency(reimbursed)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Cashback bonus</span>
-                <span className="font-semibold text-ink">{formatCurrency(cashback)}</span>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-0.5">
-                <span className="font-semibold text-slate-600">Total (product free + cashback)</span>
-                <span className="font-bold text-emerald-600">{formatCurrency(defaultAmount)}</span>
-              </div>
+          {isReimbursement ? (
+            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-xs">
+              <span className="font-semibold text-slate-600">Cashback (verified order amount)</span>
+              <span className="font-bold text-emerald-600">{formatCurrency(defaultAmount)}</span>
             </div>
           ) : (
             <p className="mt-1 text-xs text-slate-400">Campaign reward: {formatCurrency(defaultAmount)}</p>
           )}
+            {orderAmountMissing ? (
+              <p className="text-sm text-rose-600">Add the employee-verified order amount in Application Review before releasing cashback.</p>
+            ) : null}
         </div>
-        <div>
+        {!isReimbursement ? <div>
           <Label>Amount to pay (₹)</Label>
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min={1} />
-        </div>
+        </div> : null}
         {error && <p className="text-sm text-rose-600">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => pay.mutate()} disabled={pay.isPending}>
+          <Button onClick={() => pay.mutate()} disabled={pay.isPending || orderAmountMissing}>
             {pay.isPending ? "Paying…" : "Confirm & Pay"}
           </Button>
         </div>

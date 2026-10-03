@@ -8,7 +8,7 @@ export type CampaignSort = "recommended" | "latest" | "highest_reward";
 // fields (e.g. budget, seller_id/seller_name) so they are never sent to the
 // creator app — not even in the raw API payload.
 export const CAMPAIGN_COLUMNS =
-  "id, title, brand_name, campaign_type, campaign_image, description, deliverables, instructions, category, min_followers, max_followers, slots, reward_amount, cashback_percentage, application_deadline, campaign_deadline, product_url, product_name, asin, platform, review_upload_hours, sample_video_url, sample_screenshots, status, created_by, created_at, updated_at";
+  "id, title, brand_name, campaign_type, campaign_image, campaign_images, description, deliverables, instructions, category, min_followers, max_followers, slots, reward_amount, cashback_percentage, application_deadline, campaign_deadline, product_url, product_name, asin, platform, review_upload_hours, sample_video_url, sample_screenshots, campaign_code, status, created_by, created_at, updated_at";
 
 export interface CampaignFilters {
   type: CampaignType;

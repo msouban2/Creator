@@ -129,12 +129,13 @@ type Reviewer = { id: string; full_name: string | null; review_types: string[] |
 // applications and mirrors what the Review Queue used to do — but now the work
 // happens right here on the Applications page.
 type ActionKey =
-  | "need_actions" | "order_screenshot" | "review_recording" | "seller_feedback"
+  | "need_actions" | "order_screenshot" | "approved_orders" | "review_recording" | "seller_feedback"
   | "creators_applied" | "barter_approval" | "paid_approval" | "draft_pending" | "live_update" | "rejected" | "completed";
 
 const ACTION_TABS: { key: ActionKey; label: string }[] = [
   { key: "need_actions", label: "Need Actions" },
   { key: "order_screenshot", label: "Order Screenshot" },
+  { key: "approved_orders", label: "Approved Orders" },
   { key: "review_recording", label: "Review Submission Recording" },
   { key: "seller_feedback", label: "Seller Feedback Screenshot" },
   { key: "barter_approval", label: "Barter Creator Approval" },
@@ -143,12 +144,14 @@ const ACTION_TABS: { key: ActionKey; label: string }[] = [
   { key: "rejected", label: "Rejected" },
   { key: "completed", label: "Completed" },
 ];
+const EMPLOYEE_REVIEW_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 // Labels for every action, including the ones reachable only by clicking an
 // overview tile (Creators Applied / Draft Videos Pending).
 const ACTION_LABEL: Record<ActionKey, string> = {
   need_actions: "Need Actions",
   order_screenshot: "Order Screenshot",
+  approved_orders: "Approved Orders",
   review_recording: "Review Submission Recording",
   seller_feedback: "Seller Feedback Screenshot",
   creators_applied: "Creators Applied",
@@ -200,6 +203,8 @@ function matchesAction(a: Application, key: ActionKey): boolean {
       return nextAction(a).who === "employee";
     case "order_screenshot":
       return type === "reimbursement" && s === "ordered";
+    case "approved_orders":
+      return type === "reimbursement" && s === "order_approved";
     case "review_recording":
       return nextAction(a).who === "employee" && s === "submitted" && reviewPending(a);
     case "seller_feedback":
@@ -491,6 +496,7 @@ export default function Applications() {
                       <StatTile label="Seller Feedback Screenshot" value={cnt(t, (a) => matchesAction(a, "seller_feedback"))} onClick={() => jump("seller_feedback", t)} />
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-1 border-t border-slate-100 pt-3">
+                      <StatTile label="Orders Approved" value={cnt(t, (a) => matchesAction(a, "approved_orders"))} onClick={() => jump("approved_orders", t)} />
                       <StatTile label="Creators Applied" value={cnt(t, (a) => a.status === "applied")} tone="rose" onClick={() => jump("creators_applied", t)} />
                       <StatTile label="Draft Videos Pending" value={cnt(t, (a) => a.status === "draft_submitted" || a.status === "draft_revision")} tone="amber" onClick={() => jump("draft_pending", t)} />
                     </div>
@@ -740,6 +746,9 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const sub = app.submissions?.[0];
+  const employeeReviewDueAt = sub
+    ? new Date(new Date(sub.updated_at || sub.created_at).getTime() + EMPLOYEE_REVIEW_WINDOW_MS)
+    : null;
   const [showPay, setShowPay] = useState(false);
   const [showSendBack, setShowSendBack] = useState(false);
 
@@ -818,6 +827,13 @@ function SubmissionReviewPanel({ app }: { app: Application }) {
       <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
         <ClipboardList size={13} /> Content review
       </p>
+      {sub?.review_status === "pending" && employeeReviewDueAt ? (
+        <p className={`mb-3 rounded-lg px-3 py-2 text-xs font-semibold ${employeeReviewDueAt.getTime() < Date.now() ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>
+          {employeeReviewDueAt.getTime() < Date.now()
+            ? `Employee review overdue — due ${formatDate(employeeReviewDueAt.toISOString())}.`
+            : `Employee review due within 72 hours — ${formatDate(employeeReviewDueAt.toISOString())}.`}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {awaitingReview && (

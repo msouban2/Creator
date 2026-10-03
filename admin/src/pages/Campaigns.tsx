@@ -179,6 +179,7 @@ const EMPTY: FormState = {
   brand_name: "",
   campaign_type: "reimbursement",
   campaign_image: "",
+  campaign_images: [],
   description: "",
   deliverables: "",
   instructions: "",
@@ -424,6 +425,7 @@ export default function Campaigns() {
   const openEdit = (c: Campaign) => {
     setForm({
       ...c,
+      campaign_images: c.campaign_images ?? [],
       application_deadline: c.application_deadline?.slice(0, 16) ?? "",
       campaign_deadline: c.campaign_deadline?.slice(0, 16) ?? "",
     });
@@ -451,6 +453,53 @@ export default function Campaigns() {
     const { data: pub } = supabase.storage.from("campaign-images").getPublicUrl(path);
     set("campaign_image", pub.publicUrl);
     setUploading(false);
+  };
+
+  const onCampaignGalleryImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setUploading(true);
+    setError(null);
+    const urls: string[] = [];
+    for (const file of files) {
+      const path = `gallery/${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name.replace(/\s+/g, "_")}`;
+      const { error: upErr } = await supabase.storage.from("campaign-images").upload(path, file, { cacheControl: "3600", upsert: true });
+      if (upErr) {
+        setError(upErr.message);
+        setUploading(false);
+        return;
+      }
+      urls.push(supabase.storage.from("campaign-images").getPublicUrl(path).data.publicUrl);
+    }
+    set("campaign_images", [...(form.campaign_images ?? []), ...urls]);
+    setUploading(false);
+    e.target.value = "";
+  };
+
+  const onReviewSampleVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      setError("Choose a video file for the review sample.");
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    const path = `samples/videos/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+    const { error: uploadError } = await supabase.storage.from("campaign-images").upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: true,
+    });
+    if (uploadError) {
+      setError(uploadError.message);
+      setUploading(false);
+      return;
+    }
+    const { data } = supabase.storage.from("campaign-images").getPublicUrl(path);
+    set("sample_video_url", data.publicUrl);
+    setUploading(false);
+    e.target.value = "";
   };
 
   const onSampleImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -481,6 +530,7 @@ export default function Campaigns() {
         brand_name: payload.brand_name,
         campaign_type: payload.campaign_type,
         campaign_image: payload.campaign_image || null,
+        campaign_images: payload.campaign_images ?? [],
         description: payload.description || null,
         deliverables: payload.deliverables || null,
         instructions:
@@ -883,9 +933,9 @@ export default function Campaigns() {
               </div>
             )}
 
-            {/* Image upload */}
+            {/* Banner image */}
             <div>
-              <Label>Campaign Image</Label>
+              <Label>Banner Image</Label>
               <div className="flex items-center gap-3">
                 <div className="h-16 w-24 overflow-hidden rounded-xl bg-slate-100">
                   {form.campaign_image ? (
@@ -898,8 +948,33 @@ export default function Campaigns() {
                 </div>
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
                   {uploading ? <Loader2 size={16} className="animate-spin" /> : <ImagePlus size={16} />}
-                  {uploading ? "Uploading…" : "Upload image"}
+                  {uploading ? "Uploading…" : "Upload banner image"}
                   <input type="file" accept="image/*" className="hidden" onChange={onImage} />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <Label>Gallery Images</Label>
+              <p className="mb-2 text-xs text-slate-400">Upload multiple product photos. These are separate from the banner and sample screenshots.</p>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                {(form.campaign_images ?? []).map((url, index) => (
+                  <div key={`${url}-${index}`} className="relative flex h-20 w-20 items-center justify-center rounded-lg bg-white p-2 ring-1 ring-slate-200">
+                    <img src={url} alt={`Campaign gallery ${index + 1}`} className="h-full w-full object-contain" />
+                    <button
+                      type="button"
+                      onClick={() => set("campaign_images", (form.campaign_images ?? []).filter((_, imageIndex) => imageIndex !== index))}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white"
+                      aria-label={`Remove gallery image ${index + 1}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <label className="flex h-20 min-w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white px-3 text-primary hover:border-primary">
+                  <ImagePlus size={18} />
+                  <span className="text-[10px] font-semibold">Upload multiple images</span>
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={onCampaignGalleryImages} />
                 </label>
               </div>
             </div>
@@ -1088,6 +1163,25 @@ export default function Campaigns() {
                 <Textarea value={form.instructions ?? ""} onChange={(e) => set("instructions", e.target.value)} placeholder="Tag @brand, use #hashtag…" />
               )}
             </div>
+
+            {form.campaign_type === "reimbursement" ? (
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <Label>Review Sample Video</Label>
+                {form.sample_video_url ? (
+                  <div className="mt-2 space-y-2">
+                    <video src={form.sample_video_url} controls className="max-h-56 w-full rounded-lg bg-black object-contain" />
+                    <Button type="button" variant="outline" size="sm" onClick={() => set("sample_video_url", "")}>Remove sample video</Button>
+                  </div>
+                ) : null}
+                <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
+                  <ImagePlus size={16} /> {uploading ? "Uploading…" : form.sample_video_url ? "Replace review sample video" : "Upload review sample video"}
+                  <input type="file" accept="video/*" className="hidden" onChange={onReviewSampleVideo} disabled={uploading} />
+                </label>
+                <p className="mt-1 text-xs text-slate-400">
+                  This campaign-specific video appears when creators tap the review sample eye button.
+                </p>
+              </div>
+            ) : null}
 
             {form.campaign_type !== "reimbursement" && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">

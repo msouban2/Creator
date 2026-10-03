@@ -1,19 +1,21 @@
 import { useState } from "react";
-import { Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { colors } from "../lib/theme";
 import type { SampleProof } from "../lib/samples";
 
 function SampleViewer({ sample, onClose }: { sample: SampleProof | null; onClose: () => void }) {
+  const { height } = useWindowDimensions();
   const player = useVideoPlayer(sample?.video ?? null, (p) => {
     p.loop = true;
   });
 
   return (
-    <Modal visible={!!sample} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/60">
-        <View className="max-h-[88%] rounded-t-3xl bg-white">
+    <Modal visible={!!sample} presentationStyle="fullScreen" animationType="fade" onRequestClose={onClose}>
+      <SafeAreaView className="flex-1 bg-white">
+        <View className="flex-1">
           <View className="flex-row items-start gap-3 border-b border-primary-100 px-5 py-4">
             <View className="flex-1">
               <Text className="text-base font-extrabold text-ink">{sample?.title}</Text>
@@ -27,11 +29,11 @@ function SampleViewer({ sample, onClose }: { sample: SampleProof | null; onClose
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
+          <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }}>
             {sample?.video ? (
               <VideoView
                 player={player}
-                style={{ width: "100%", height: 460, borderRadius: 16, backgroundColor: "#000" }}
+                style={{ width: "100%", height: Math.max(height - 150, 320), borderRadius: 16, backgroundColor: "#000" }}
                 contentFit="contain"
                 allowsFullscreen
                 nativeControls
@@ -39,13 +41,13 @@ function SampleViewer({ sample, onClose }: { sample: SampleProof | null; onClose
             ) : sample?.image ? (
               <Image
                 source={sample.image}
-                className="h-[460px] w-full rounded-2xl bg-canvas"
+                style={{ width: "100%", height: Math.max(height - 150, 320), borderRadius: 16, backgroundColor: colors.canvas }}
                 resizeMode="contain"
               />
             ) : null}
           </ScrollView>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -59,11 +61,7 @@ export function SampleProofChip({ sample }: { sample: SampleProof }) {
         onPress={() => setOpen(true)}
         className="flex-row items-center gap-1.5 self-start rounded-full bg-primary-50 px-3 py-1.5"
       >
-        <Ionicons
-          name={sample.video ? "play-circle-outline" : "eye-outline"}
-          size={14}
-          color={colors.primary}
-        />
+        <Ionicons name="eye-outline" size={14} color={colors.primary} />
         <Text className="text-xs font-bold text-primary">See sample</Text>
       </Pressable>
       {open ? <SampleViewer sample={sample} onClose={() => setOpen(false)} /> : null}

@@ -90,6 +90,7 @@ export interface Campaign {
   brand_name: string;
   campaign_type: CampaignType;
   campaign_image: string | null;
+  campaign_images?: string[] | null;
   description: string | null;
   deliverables: string | null;
   instructions: string | null;
@@ -106,6 +107,7 @@ export interface Campaign {
   asin: string | null;
   review_upload_hours: number | null;
   sample_video_url: string | null;
+  campaign_code?: string | null;
   sample_screenshots?: string[] | null;
   status: CampaignStatus;
   created_by: string | null;
@@ -123,12 +125,16 @@ export interface Application {
   last_rejected_at: string | null;
   purchase_proof: string | null;
   purchase_amount: number | null;
+  payout_amount: number | null;
+  order_id: string | null;
+  order_date: string | null;
   order_started_at: string | null;
   order_submitted_at: string | null;
   product_received_at: string | null;
   review_deadline: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  expected_delivery_at: string | null;
   delivery_photo_url: string | null;
   delivery_photo_at: string | null;
   seller_shipment_status: string | null;

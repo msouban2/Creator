@@ -48,12 +48,7 @@ async function fetchSellers() {
 }
 
 function reviewDeadline(app: Application): Date | null {
-  if (app.review_deadline) return new Date(app.review_deadline);
-  const hours = app.campaign?.review_upload_hours ?? null;
-  const from = app.product_received_at;
-  if (from && hours) return new Date(new Date(from).getTime() + hours * 3600 * 1000);
-  if (app.campaign?.campaign_deadline) return new Date(app.campaign.campaign_deadline);
-  return null;
+  return app.review_deadline ? new Date(app.review_deadline) : null;
 }
 
 function Detail({ icon: Icon, label, children }: { icon: typeof Hash; label: string; children: React.ReactNode }) {
@@ -151,12 +146,8 @@ export default function ApplicationReview() {
   const [orderAmount, setOrderAmount] = useState("");
   const [orderDate, setOrderDate] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
-  const [cashbackAmount, setCashbackAmount] = useState("");
   const [sellerFeedback, setSellerFeedback] = useState("");
   const [sellerId, setSellerId] = useState("");
-  const [reviewDays, setReviewDays] = useState("");
-  const [reviewHours, setReviewHours] = useState("");
-  const [reviewMinutes, setReviewMinutes] = useState("");
   const [detailsLoadedFor, setDetailsLoadedFor] = useState<string | null>(null);
   if (app && detailsLoadedFor !== id) {
     setOrderId(app.order_id ?? "");
@@ -169,21 +160,8 @@ export default function ApplicationReview() {
     );
     setOrderDate(app.order_date ?? "");
     setDeliveryDate(app.expected_delivery_at ?? "");
-    setCashbackAmount(app.payout_amount != null ? String(app.payout_amount) : "");
     setSellerFeedback(app.seller_feedback ?? "");
     setSellerId(app.campaign?.seller_id ?? "");
-    // Prefill the timer from the campaign fallback (stored as fractional hours),
-    // split into days / hours / minutes.
-    const fallbackHours = app.campaign?.review_upload_hours;
-    if (fallbackHours != null) {
-      const totalMin = Math.round(Number(fallbackHours) * 60);
-      const dd = Math.floor(totalMin / 1440);
-      const hh = Math.floor((totalMin % 1440) / 60);
-      const mm = totalMin % 60;
-      setReviewDays(dd ? String(dd) : "");
-      setReviewHours(hh ? String(hh) : "");
-      setReviewMinutes(mm ? String(mm) : "");
-    }
     setDetailsLoadedFor(id ?? null);
   }
 
@@ -204,13 +182,11 @@ export default function ApplicationReview() {
   const persistDetails = async () => {
     if (detailsLoadedFor !== id) return;
     const parsedAmount = orderAmount.trim() === "" ? null : Number(orderAmount);
-    const parsedCashback = cashbackAmount.trim() === "" ? null : Number(cashbackAmount);
     const patch = {
       order_id: orderId.trim() || null,
       purchase_amount: parsedAmount,
       order_date: orderDate.trim() || null,
       expected_delivery_at: deliveryDate.trim() || null,
-      payout_amount: parsedCashback,
       seller_feedback: sellerFeedback.trim() || null,
     };
     const { error } = await supabase.from("applications").update(patch).eq("id", id);
@@ -246,15 +222,17 @@ export default function ApplicationReview() {
   });
 
   const orderApproval = useMutation({
-    mutationFn: async ({ approve, minutes, reject_reason }: { approve: boolean; minutes?: number; reject_reason?: string }) => {
+    mutationFn: async ({ approve, reject_reason }: { approve: boolean; reject_reason?: string }) => {
       await persistDetails();
+      const verifiedOrderAmount = orderAmount.trim() === "" ? null : Number(orderAmount);
+      if (approve && (!verifiedOrderAmount || verifiedOrderAmount <= 0)) {
+        throw new Error("Enter the verified order amount before approving this order.");
+      }
       const now = new Date();
       const patch: Record<string, unknown> = approve
         ? {
             status: "order_approved",
             product_received_at: now.toISOString(),
-            review_deadline:
-              minutes && minutes > 0 ? new Date(now.getTime() + minutes * 60 * 1000).toISOString() : null,
           }
         : { status: "rejected", reject_reason };
       const { error } = await supabase.from("applications").update(patch).eq("id", id);
@@ -344,8 +322,6 @@ export default function ApplicationReview() {
   const submissionOpen = !isReimbursement || !deliveryDate || new Date(deliveryDate).getTime() <= Date.now();
   const canDecide = hasPurchase && hasReview;
   const deadline = reviewDeadline(app);
-  const totalReviewMinutes =
-    (Number(reviewDays) || 0) * 1440 + (Number(reviewHours) || 0) * 60 + (Number(reviewMinutes) || 0);
 
   return (
     <div className="space-y-5">
@@ -559,18 +535,9 @@ export default function ApplicationReview() {
                         <li>• SFB</li>
                       </ul>
                     </div>
-                    <div>
-                      <Label>Cashback amount</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={cashbackAmount}
-                        onChange={(e) => setCashbackAmount(e.target.value)}
-                        placeholder="450"
-                      />
-                      <p className="mt-1 text-xs text-slate-400">This amount is added to the creator wallet.</p>
-                    </div>
+                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                      Creator cashback will equal the verified order amount.
+                    </p>
                   </>
                 ) : (
                   <div className="divide-y divide-slate-100">
@@ -591,11 +558,8 @@ export default function ApplicationReview() {
                     <Detail icon={Calendar} label="Review submitted">
                       {app.submissions?.[0]?.created_at ? formatDate(app.submissions[0].created_at) : "—"}
                     </Detail>
-                    <Detail icon={Clock} label="Review upload deadline">
+                    <Detail icon={Clock} label="Employee review deadline">
                       {deadline ? formatDate(deadline.toISOString()) : "—"}
-                      {c?.review_upload_hours ? (
-                        <span className="ml-1 text-xs text-slate-400">({c.review_upload_hours}h window)</span>
-                      ) : null}
                     </Detail>
                   </div>
                 )}
@@ -771,7 +735,7 @@ export default function ApplicationReview() {
                 </div>
               )}
 
-              {/* Reimbursement order → approve (with review timer) or reject */}
+              {/* Reimbursement order → approve or reject */}
               {app.status === "ordered" && (
                 <div className="space-y-2">
                   {app.order_submitted_at && (() => {
@@ -786,30 +750,8 @@ export default function ApplicationReview() {
                   {!hasPurchase && (
                     <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">Waiting on the creator's order screenshot.</p>
                   )}
-                  <div>
-                    <Label>Review upload timer</Label>
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <Input type="number" min={0} value={reviewDays} onChange={(e) => setReviewDays(e.target.value)} placeholder="Days" />
-                        <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Days</p>
-                      </div>
-                      <div className="flex-1">
-                        <Input type="number" min={0} max={23} value={reviewHours} onChange={(e) => setReviewHours(e.target.value)} placeholder="Hours" />
-                        <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Hours</p>
-                      </div>
-                      <div className="flex-1">
-                        <Input type="number" min={0} max={59} value={reviewMinutes} onChange={(e) => setReviewMinutes(e.target.value)} placeholder="Minutes" />
-                        <p className="mt-1 text-center text-[10px] uppercase tracking-wide text-slate-400">Minutes</p>
-                      </div>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {totalReviewMinutes > 0
-                        ? `Creator must upload their review by ${formatDate(new Date(Date.now() + totalReviewMinutes * 60 * 1000).toISOString())}.`
-                        : "Leave blank to fall back to the campaign deadline."}
-                    </p>
-                  </div>
                   <div className="flex gap-2">
-                    <Button className="flex-1" disabled={!hasPurchase || orderApproval.isPending} onClick={() => orderApproval.mutate({ approve: true, minutes: totalReviewMinutes > 0 ? totalReviewMinutes : undefined })}>
+                    <Button className="flex-1" disabled={!hasPurchase || !orderAmount.trim() || orderApproval.isPending} onClick={() => orderApproval.mutate({ approve: true })}>
                       {orderApproval.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Approve Order
                     </Button>
                     <Button variant="outline" className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50" disabled={!hasPurchase || orderApproval.isPending} onClick={() => setRejecting(true)}>

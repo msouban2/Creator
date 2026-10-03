@@ -125,15 +125,6 @@ export default function ApplicationDetailScreen() {
   // the flat cashback bonus. Before purchase we estimate with the campaign price.
   const reimbursementTotal = (app.purchase_amount ?? c.reward_amount) + c.cashback_percentage;
 
-  // Review-upload window: employees set an explicit review_deadline when they
-  // approve the order. Fall back to review_upload_hours from product_received_at,
-  // then to the campaign deadline.
-  const reviewDeadline =
-    app.review_deadline ??
-    (app.product_received_at && c.review_upload_hours
-      ? new Date(new Date(app.product_received_at).getTime() + c.review_upload_hours * 3600 * 1000).toISOString()
-      : c.campaign_deadline);
-
   // Staff have 24 hours to approve a submitted order screenshot. The countdown
   // runs from when the creator submitted it (order_submitted_at).
   const ORDER_APPROVAL_HOURS = 24;
@@ -264,8 +255,7 @@ export default function ApplicationDetailScreen() {
   // happens while the product is shipped (staff then confirm delivery); for
   // reimbursement it happens after they've bought & received the product.
   const showDeliveryCard =
-    ((type === "barter" || type === "paid") && app.status === "product_shipped") ||
-    (type === "reimbursement" && app.status === "product_received");
+    (type === "barter" || type === "paid") && app.status === "product_shipped";
 
   return (
     <ScrollView className="flex-1 bg-canvas" contentContainerStyle={{ paddingBottom: 120, paddingTop: insets.top + 12 }}>
@@ -428,9 +418,7 @@ export default function ApplicationDetailScreen() {
             <View className="mt-2 flex-row items-center gap-2 rounded-xl bg-green-50 p-3">
               <Ionicons name="checkmark-circle" size={16} color={colors.success} />
               <Text className="flex-1 text-xs text-success">
-                {type === "reimbursement"
-                  ? "Delivered photo submitted. Thank you!"
-                  : "Delivered photo submitted — waiting for our team to confirm delivery."}
+                Delivered photo submitted — waiting for our team to confirm delivery.
               </Text>
             </View>
           ) : (
@@ -477,10 +465,10 @@ export default function ApplicationDetailScreen() {
           <View className="mt-3 flex-row justify-between">
             <View>
               <Text className="text-xs text-ink-muted">
-                {c.campaign_type === "reimbursement" ? "Total earning" : "Reward"}
+                {c.campaign_type === "reimbursement" ? "Cashback received" : "Reward"}
               </Text>
               <Text className="text-2xl font-extrabold text-success">
-                {formatCurrency(c.campaign_type === "reimbursement" ? reimbursementTotal : c.reward_amount)}
+                {formatCurrency(c.campaign_type === "reimbursement" ? app.payout_amount ?? reimbursementTotal : c.reward_amount)}
               </Text>
             </View>
             <View className="items-end">
@@ -492,7 +480,7 @@ export default function ApplicationDetailScreen() {
             <Ionicons name="checkmark-circle" size={16} color={colors.success} />
             <Text className="text-xs text-success">
               {c.campaign_type === "reimbursement"
-                ? "Product refunded (free) + cashback released to your wallet."
+                ? "Your cashback has been credited. Check your wallet."
                 : "Payment released to your wallet."}
             </Text>
           </View>
@@ -671,7 +659,9 @@ export default function ApplicationDetailScreen() {
             <Text className="text-base font-bold text-ink">Order approved!</Text>
           </View>
           <Text className="mt-1 text-sm text-ink-soft">
-            You're all set — go ahead and submit your review content below.
+            {app.review_deadline
+              ? "Your review timer is set. Submit your review before it expires."
+              : "Your order is approved. The team will set your review timer before content submission opens."}
           </Text>
         </Card>
       ) : null}
@@ -814,13 +804,6 @@ export default function ApplicationDetailScreen() {
 
       {type === "reimbursement" && ["order_approved", "product_received", "content_creation"].includes(app.status) ? (
         <View className="mx-5 mt-4 gap-3">
-          {reviewDeadline ? (
-            <CountdownCard
-              target={reviewDeadline}
-              label="Upload your review before"
-              endedLabel="Submission window closed"
-            />
-          ) : null}
           <Button
             label="Submit Content"
             variant="dark"
@@ -829,6 +812,17 @@ export default function ApplicationDetailScreen() {
             rightIcon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
           />
         </View>
+      ) : null}
+      {type === "reimbursement" && app.status === "submitted" ? (
+        <Card className="mx-5 mt-4">
+          <Text className="text-base font-bold text-ink">Review submitted</Text>
+          <Text className="mt-1 text-sm text-ink-soft">The employee review timer starts now. Your review will be checked within 72 hours.</Text>
+          {app.review_deadline ? (
+            <View className="mt-3">
+              <CountdownCard target={app.review_deadline} label="Employee review due in" endedLabel="Review is overdue" />
+            </View>
+          ) : null}
+        </Card>
       ) : null}
     </ScrollView>
   );

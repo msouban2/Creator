@@ -105,12 +105,14 @@ export default function CampaignDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TabKey>("details");
+  const [galleryPreview, setGalleryPreview] = useState<string | null>(null);
   const { data: campaign, isLoading } = useCampaign(id!);
   const { data: myApps = [] } = useMyApplications("all");
   const { data: addresses = [] } = useAddresses();
   const apply = useApplyToCampaign();
   const saveAddress = useSaveAddress();
   const profile = useAuthStore((s) => s.profile);
+  const session = useAuthStore((s) => s.session);
   const [addressSheet, setAddressSheet] = useState(false);
   const [addr, setAddr] = useState({ name: "", phone: "", address: "", city: "", state: "", postal_code: "" });
   const isAmazonReimbursement =
@@ -228,8 +230,8 @@ export default function CampaignDetailsScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-        <View className="relative">
-          <CampaignImage uri={campaign.campaign_image} className="h-72 w-full" resizeMode="cover" iconSize={48} />
+        <View className="relative h-72 bg-white px-5 py-4">
+          <CampaignImage uri={campaign.campaign_image} className="h-full w-full rounded-2xl bg-white" resizeMode="contain" iconSize={48} />
           <Pressable onPress={() => router.back()} style={{ top: insets.top + 4 }} className="absolute left-4 h-10 w-10 items-center justify-center rounded-full bg-white/90">
             <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </Pressable>
@@ -241,6 +243,29 @@ export default function CampaignDetailsScreen() {
             <Ionicons name="share-social-outline" size={20} color={colors.primary} />
           </Pressable>
         </View>
+
+        {campaign.campaign_images?.length ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12, gap: 10 }} className="bg-white">
+            {campaign.campaign_images.map((image, index) => (
+              <Pressable
+                key={`${image}-${index}`}
+                onPress={() => setGalleryPreview(image)}
+                className="h-20 w-20 items-center justify-center rounded-xl border border-primary-100 bg-white p-2"
+              >
+                <Image source={{ uri: image }} className="h-full w-full rounded-lg" resizeMode="contain" />
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
+        <Modal visible={!!galleryPreview} transparent={false} animationType="fade" onRequestClose={() => setGalleryPreview(null)}>
+          <View className="flex-1 items-center justify-center bg-white p-5">
+            <Pressable onPress={() => setGalleryPreview(null)} className="absolute right-5 top-12 z-10 h-10 w-10 items-center justify-center rounded-full bg-primary-50">
+              <Ionicons name="close" size={22} color={colors.primary} />
+            </Pressable>
+            {galleryPreview ? <Image source={{ uri: galleryPreview }} className="h-full w-full rounded-2xl bg-white" resizeMode="contain" /> : null}
+          </View>
+        </Modal>
 
         <View className="-mt-6 rounded-t-3xl bg-canvas px-5 pt-5">
           <View className="self-start rounded-full bg-primary-100 px-3 py-1">
@@ -436,10 +461,10 @@ export default function CampaignDetailsScreen() {
         ) : null}
         <View className={campaign.product_url ? "flex-[1.3]" : "flex-1"}>
           <Button
-            label={alreadyApplied ? "View Application" : slotsFull ? "Slots full" : amazonLimitReached ? "Limit reached" : "Apply Campaign"}
-            onPress={alreadyApplied && myApp ? () => router.push(`/application/${myApp.id}`) : onApply}
+            label={!session ? "Log in to apply" : alreadyApplied ? "View Application" : slotsFull ? "Slots full" : amazonLimitReached ? "Limit reached" : "Apply Campaign"}
+            onPress={!session ? () => router.push("/(auth)/login") : alreadyApplied && myApp ? () => router.push(`/application/${myApp.id}`) : onApply}
             loading={apply.isPending}
-            disabled={!alreadyApplied && (amazonLimitReached || slotsFull)}
+            disabled={!!session && !alreadyApplied && (amazonLimitReached || slotsFull)}
             variant="primary"
             fullWidth
             rightIcon={<Ionicons name="arrow-forward" size={18} color="#fff" />}

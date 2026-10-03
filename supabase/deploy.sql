@@ -80,6 +80,7 @@ create table if not exists public.campaigns (
   brand_name          text not null,
   campaign_type       campaign_type not null,
   campaign_image      text,
+  campaign_images     text[] not null default '{}',
   description         text,
   deliverables        text,
   instructions        text,

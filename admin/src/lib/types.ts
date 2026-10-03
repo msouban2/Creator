@@ -69,6 +69,7 @@ export interface Campaign {
   brand_name: string;
   campaign_type: CampaignType;
   campaign_image: string | null;
+  campaign_images?: string[] | null;
   description: string | null;
   deliverables: string | null;
   instructions: string | null;
@@ -255,6 +256,7 @@ export interface CampaignSubmission {
   claimed_by: string | null;
   claimed_at: string | null;
   created_at: string;
+  updated_at: string;
   application?: Application;
   reviewer?: { id: string; full_name: string | null } | null;
   claimer?: { id: string; full_name: string | null } | null;

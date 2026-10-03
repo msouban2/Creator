@@ -243,7 +243,11 @@ function AuthGate() {
     if (inAuthFlow) return;
 
     if (!session) {
-      if (!inAuthGroup) router.replace("/(auth)/login");
+      const inCampaignBrowse = segments[0] === "campaign";
+      const routeSegments = segments as readonly string[];
+      const inPublicHome = !routeSegments.length || routeSegments[0] === "index" || (segments[0] === "(tabs)" && !segments[1]);
+      const inPublicCampaignList = segments[0] === "(tabs)" && segments[1] === "campaigns";
+      if (!inAuthGroup && !inCampaignBrowse && !inPublicHome && !inPublicCampaignList) router.replace("/(auth)/login");
       return;
     }
 

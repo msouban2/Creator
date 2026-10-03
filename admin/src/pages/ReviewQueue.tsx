@@ -31,6 +31,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { invalidateReviewQueries } from "@/lib/reviewSync";
 
 const ALL_TYPES: CampaignType[] = ["barter", "reimbursement", "paid"];
+const EMPLOYEE_REVIEW_WINDOW_MS = 72 * 60 * 60 * 1000;
 const TYPE_LABEL: Record<CampaignType, string> = {
   barter: "Barter",
   reimbursement: "Reimbursement",
@@ -283,6 +284,12 @@ export default function ReviewQueue() {
   const [reason, setReason] = useState("");
   const [actionIndex, setActionIndex] = useState(0);
   const [showReport, setShowReport] = useState(false);
+  const [reviewClock, setReviewClock] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setReviewClock(Date.now()), 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Records an automatic "system" entry on the internal notes thread (LRMS log).
   // Best-effort: a logging failure never blocks the action.
@@ -376,7 +383,7 @@ export default function ReviewQueue() {
   });
 
   const updateApp = useMutation({
-    mutationFn: async ({ id, status, reject_reason, draft_feedback, reviewMinutes }: { id: string; status: string; reject_reason?: string; draft_feedback?: string; reviewMinutes?: number }) => {
+    mutationFn: async ({ id, status, reject_reason, draft_feedback }: { id: string; status: string; reject_reason?: string; draft_feedback?: string }) => {
       const now = new Date().toISOString();
       const patch: Record<string, unknown> = { status };
       if (status === "selected") patch.selected_at = now;
@@ -385,8 +392,6 @@ export default function ReviewQueue() {
       if (status === "completed") patch.completed_at = now;
       if (status === "order_approved") {
         patch.product_received_at = now;
-        patch.review_deadline =
-          reviewMinutes && reviewMinutes > 0 ? new Date(Date.now() + reviewMinutes * 60 * 1000).toISOString() : null;
       }
       if (reject_reason !== undefined) patch.reject_reason = reject_reason;
       if (draft_feedback !== undefined) patch.draft_feedback = draft_feedback;
@@ -554,7 +559,7 @@ export default function ReviewQueue() {
         if (k === "a") {
           e.preventDefault();
           if (act === "select") updateApp.mutate({ id: a.id, status: "selected" });
-          else if (act === "order" && a.purchase_proof) updateApp.mutate({ id: a.id, status: "order_approved", reviewMinutes: Math.round((a.campaign?.review_upload_hours ?? 0) * 60) });
+          else if (act === "order" && a.purchase_proof) updateApp.mutate({ id: a.id, status: "order_approved" });
           else if (act === "ship") updateApp.mutate({ id: a.id, status: "product_shipped" });
           else if (act === "deliver" && a.delivery_photo_url) { setDeliverApp(a); setDeliverDays("5"); setDeliverHours(""); setDeliverMinutes(""); }
           else if (act === "draft") updateApp.mutate({ id: a.id, status: "draft_approved" });
@@ -718,7 +723,7 @@ export default function ReviewQueue() {
                         })()}
                         {a.purchase_proof ? (
                           <>
-                            <Button variant="success" size="sm" onClick={() => updateApp.mutate({ id: a.id, status: "order_approved", reviewMinutes: Math.round((a.campaign?.review_upload_hours ?? 0) * 60) })}>Approve Order</Button>
+                            <Button variant="success" size="sm" onClick={() => updateApp.mutate({ id: a.id, status: "order_approved" })}>Approve Order</Button>
                             <Button variant="danger" size="sm" onClick={() => { setRejectApp(a); setRejectReason(""); }}>Reject Order</Button>
                           </>
                         ) : (
@@ -771,6 +776,21 @@ export default function ReviewQueue() {
       {/* Current review */}
       {current && (
         <div className="space-y-4 rounded-2xl border border-slate-100 bg-white p-5">
+          {current.review_status === "pending" && (() => {
+            const submittedAt = new Date(current.updated_at || current.created_at).getTime();
+            const dueAt = submittedAt + EMPLOYEE_REVIEW_WINDOW_MS;
+            const remaining = dueAt - reviewClock;
+            const overdue = remaining <= 0;
+            const hours = Math.floor(Math.max(remaining, 0) / 3600000);
+            const minutes = Math.floor((Math.max(remaining, 0) % 3600000) / 60000);
+            return (
+              <div className={`rounded-xl px-4 py-3 text-sm font-semibold ${overdue ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>
+                {overdue
+                  ? `Employee review is overdue (due ${formatDate(new Date(dueAt).toISOString())}).`
+                  : `Employee review due in ${hours}h ${minutes}m (by ${formatDate(new Date(dueAt).toISOString())}).`}
+              </div>
+            );
+          })()}
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               {/* CREATOR */}

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
 import { KycReminder } from "../../src/components/KycReminder";
+import { useAuthStore } from "../../src/store/auth";
 
 const LABELS: Record<string, string> = {
   index: "Home",
@@ -90,6 +91,7 @@ function TabBar({ state, navigation }: any) {
 }
 
 export default function TabsLayout() {
+  const isSignedIn = !!useAuthStore((s) => s.session);
   return (
     <>
       <Tabs
@@ -98,8 +100,8 @@ export default function TabsLayout() {
       >
         <Tabs.Screen name="index" />
         <Tabs.Screen name="campaigns" />
-        <Tabs.Screen name="referrals" />
-        <Tabs.Screen name="profile" />
+        <Tabs.Screen name="referrals" options={{ href: isSignedIn ? undefined : null }} />
+        <Tabs.Screen name="profile" options={{ href: isSignedIn ? undefined : null }} />
       </Tabs>
       <KycReminder />
     </>

@@ -7,7 +7,7 @@ export type SampleProof = {
   /** Bundled still image, for screenshot samples. */
   image?: ImageSourcePropType;
   /** Bundled mp4, for video samples. Mutually exclusive with `image`. */
-  video?: number;
+  video?: number | string;
 };
 
 export const SAMPLE_ORDER_SCREENSHOT: SampleProof = {
@@ -16,6 +16,14 @@ export const SAMPLE_ORDER_SCREENSHOT: SampleProof = {
   description:
     "Full order details page showing the product name, seller, order date, order number and grand total.",
   image: require("../../assets/samples/order-screenshot.jpeg"),
+};
+
+export const SAMPLE_DELIVERY_DATE: SampleProof = {
+  key: "delivery-date",
+  title: "Delivery date screenshot",
+  description:
+    "Order details showing the delivery date, delivered status, product and order number.",
+  image: require("../../assets/samples/Delivered_date.jpeg"),
 };
 
 export const SAMPLE_REVIEW_SCREENSHOT: SampleProof = {
@@ -45,6 +53,7 @@ export const SAMPLE_SELLER_FEEDBACK: SampleProof = {
 /** Order of the reimbursement proof journey: buy → review → record → rate the seller. */
 export const REIMBURSEMENT_SAMPLES: SampleProof[] = [
   SAMPLE_ORDER_SCREENSHOT,
+  SAMPLE_DELIVERY_DATE,
   SAMPLE_REVIEW_SCREENSHOT,
   SAMPLE_REVIEW_VIDEO,
   SAMPLE_SELLER_FEEDBACK,
