@@ -419,7 +419,7 @@ export default function CampaignDetail() {
       const rows = active.map((a, i) => ({
         "#": i + 1,
         "Order Date": a.applied_at ? formatDate(a.applied_at) : "",
-        "Delivery Date": a.delivered_at ? formatDate(a.delivered_at) : "",
+        "Delivery Date": a.expected_delivery_at ? formatDate(a.expected_delivery_at) : "",
         Creator: a.creator?.full_name ?? "",
         Instagram: a.creator?.instagram_username ?? "",
         Product: campaign.product_name ?? campaign.title,
@@ -585,7 +585,7 @@ export default function CampaignDetail() {
                     <tr key={a.id} className="hover:bg-slate-50/50">
                       <Td>{i + 1}</Td>
                       <Td>{formatDate(a.applied_at)}</Td>
-                      <Td>{a.delivered_at ? formatDate(a.delivered_at) : "-"}</Td>
+                      <Td>{a.expected_delivery_at ? formatDate(a.expected_delivery_at) : "-"}</Td>
                       <Td><CreatorCell app={a} /></Td>
                       <Td className="max-w-[180px]">
                         <p className="truncate text-xs font-medium text-ink">{campaign.product_name ?? campaign.title}</p>
