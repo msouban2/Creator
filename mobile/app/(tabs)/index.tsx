@@ -204,7 +204,7 @@ export default function HomeScreen() {
   });
 
   const barterLocked =
-    (type === "barter" || type === "paid") && (profile?.instagram_followers ?? 0) < BARTER_MIN;
+    !!profile && (type === "barter" || type === "paid") && profile.instagram_followers < BARTER_MIN;
 
   return (
     <View className="flex-1 bg-canvas" style={{ paddingTop: insets.top + 6 }}>

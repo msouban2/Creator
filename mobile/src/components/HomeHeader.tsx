@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../lib/theme";
 import { greeting } from "../lib/format";
 import { useNotifications } from "../api/notifications";
+import { useAuthStore } from "../store/auth";
 
 interface HomeHeaderProps {
   name?: string | null;
@@ -14,6 +15,7 @@ interface HomeHeaderProps {
 
 export function HomeHeader({ name, title, subtitle, centered = true }: HomeHeaderProps) {
   const router = useRouter();
+  const isSignedIn = !!useAuthStore((s) => s.session);
   const { data: notifications } = useNotifications();
   const unread = (notifications ?? []).filter((n) => !n.is_read).length;
 
@@ -58,11 +60,11 @@ export function HomeHeader({ name, title, subtitle, centered = true }: HomeHeade
           <Text className="text-sm font-semibold text-ink">Help</Text>
         </Pressable>
         <Pressable
-          onPress={() => router.push("/notifications")}
+          onPress={() => router.push(isSignedIn ? "/notifications" : "/(auth)/login")}
           className="h-11 w-11 items-center justify-center rounded-full border border-primary-100 bg-white"
         >
-          <Ionicons name="notifications-outline" size={20} color={colors.ink} />
-          {unread > 0 ? (
+          <Ionicons name={isSignedIn ? "notifications-outline" : "log-in-outline"} size={20} color={colors.ink} />
+          {isSignedIn && unread > 0 ? (
             <View className="absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1">
               <Text className="text-[10px] font-bold text-white">{unread}</Text>
             </View>

@@ -659,9 +659,9 @@ export default function ApplicationDetailScreen() {
             <Text className="text-base font-bold text-ink">Order approved!</Text>
           </View>
           <Text className="mt-1 text-sm text-ink-soft">
-            {app.review_deadline
-              ? "Your review timer is set. Submit your review before it expires."
-              : "Your order is approved. The team will set your review timer before content submission opens."}
+            {app.expected_delivery_at
+              ? `Expected delivery date: ${formatDate(app.expected_delivery_at)}.`
+              : "Your order is approved."} Upload the delivered-date screenshot and required campaign proof when ready. The 72-hour employee review timer starts after you submit.
           </Text>
         </Card>
       ) : null}

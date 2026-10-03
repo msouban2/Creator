@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, Text, View, Pressable, Alert } from "react-native";
+import { ScrollView, Text, View, Pressable, Alert, Platform } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,9 +7,10 @@ import { z } from "zod";
 import { Link, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
-import { signInWithEmail, signInWithGoogle, signInWithPhone, resendSignupOtp } from "../../src/api/auth";
+import { signInWithApple, signInWithEmail, signInWithGoogle, signInWithPhone, resendSignupOtp } from "../../src/api/auth";
 import { colors } from "../../src/lib/theme";
 
 const schema = z.object({
@@ -22,6 +23,15 @@ export default function LoginScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const onApple = async () => {
+    try {
+      await signInWithApple();
+    } catch (e: any) {
+      if (e?.code !== "ERR_REQUEST_CANCELED") {
+        Alert.alert("Apple sign-in failed", e.message ?? "Try again.");
+      }
+    }
+  };
   const { control, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { email: "", password: "" },
@@ -140,6 +150,15 @@ export default function LoginScreen() {
             fullWidth
             leftIcon={<Ionicons name="logo-google" size={18} color="#DB4437" />}
           />
+          {Platform.OS === "ios" ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={14}
+              style={{ width: "100%", height: 48 }}
+              onPress={onApple}
+            />
+          ) : null}
         </View>
 
         <View className="mt-6 flex-row items-center justify-center gap-1">

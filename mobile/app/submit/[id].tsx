@@ -35,22 +35,28 @@ export default function SubmitScreen() {
   const isOnlyOrder = deliverables.includes("only order");
   const hasRating = deliverables.includes("rating");
   const hasReview = deliverables.includes("review");
-  const requiresReviewVideo = isReimbursement && !isOnlyOrder;
+  const requiresReviewVideo = isReimbursement && !isOnlyOrder && (hasReview || hasRating);
   const requiresReviewScreenshot = isReimbursement && (hasReview || hasRating);
   const requiresSellerFeedback = isReimbursement && deliverables.includes("seller feedback");
   const showSellerFeedback = isReimbursement && requiresSellerFeedback;
-  const reviewVideoTitle = hasReview && hasRating
-    ? "Review + rating sample video"
+  const reviewVideoLabel = hasReview && hasRating
+    ? "Review + rating"
     : hasRating && requiresSellerFeedback
-      ? "Rating + seller feedback sample video"
+      ? "Rating + seller feedback"
+      : hasRating
+        ? "Rating"
+        : hasReview && requiresSellerFeedback
+          ? "Review + seller feedback"
+          : "Review";
+  const reviewVideoTitle = `${reviewVideoLabel} sample video`;
+  const reviewScreenshotTitle = hasReview && hasRating
+    ? "Review + rating submission screenshot"
     : hasRating
-      ? "Rating sample video"
-      : hasReview && requiresSellerFeedback
-        ? "Review + seller feedback sample video"
-        : "Review sample video";
+      ? "Rating submission screenshot"
+      : "Review submission screenshot";
   const campaignReviewSample = app?.campaign?.sample_video_url
     ? { ...SAMPLE_REVIEW_VIDEO, title: reviewVideoTitle, description: `Campaign ${app.campaign.campaign_code ?? app.campaign.title}: follow this campaign's review criteria.`, video: app.campaign.sample_video_url }
-    : { ...SAMPLE_REVIEW_VIDEO, title: reviewVideoTitle, description: `Campaign ${app?.campaign?.campaign_code ?? "criteria"}: follow the campaign's review criteria.` };
+    : null;
   const [reel, setReel] = useState("");
   const [post, setPost] = useState("");
   const [story, setStory] = useState("");
@@ -298,9 +304,15 @@ export default function SubmitScreen() {
         {isReimbursement ? (
           requiresReviewVideo ? (
           <View className="gap-2">
-            <Text className="text-sm font-semibold text-ink">2. Review proof video</Text>
-            <Text className="text-xs text-ink-muted">Use the example for this campaign&apos;s code and deliverable criteria.</Text>
-            <SampleProofChip sample={campaignReviewSample} />
+            <Text className="text-sm font-semibold text-ink">2. {reviewVideoLabel} video</Text>
+            <Text className="text-xs text-ink-muted">See the campaign-specific sample, then upload your video.</Text>
+            {campaignReviewSample ? (
+              <SampleProofChip sample={campaignReviewSample} />
+            ) : (
+              <Text className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Review sample video is not set for campaign {app?.campaign?.campaign_code ?? "code unavailable"}.
+              </Text>
+            )}
             {video ? (
               <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
                 <View className="flex-row items-center gap-3">
@@ -354,8 +366,8 @@ export default function SubmitScreen() {
 
         {requiresReviewScreenshot ? (
           <View className="gap-2">
-            <Text className="text-sm font-semibold text-ink">3. Review / rating screenshot</Text>
-            <Text className="text-xs text-ink-muted">Upload proof that you submitted the review or rating required by this campaign.</Text>
+            <Text className="text-sm font-semibold text-ink">3. {reviewScreenshotTitle}</Text>
+            <Text className="text-xs text-ink-muted">Upload the proof required by this campaign&apos;s deliverables.</Text>
             <SampleProofChip sample={SAMPLE_REVIEW_SCREENSHOT} />
             {reviewScreenshot ? (
               <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">

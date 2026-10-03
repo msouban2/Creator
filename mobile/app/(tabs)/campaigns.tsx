@@ -18,6 +18,7 @@ const FILTERS = ["All", "Applied", "Selected", "In Progress", "Completed", "Reje
 type Filter = (typeof FILTERS)[number];
 
 const IN_PROGRESS: ApplicationStatus[] = [
+  "selected",
   "ordered",
   "order_approved",
   "product_shipped",

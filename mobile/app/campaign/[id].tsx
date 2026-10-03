@@ -107,7 +107,7 @@ export default function CampaignDetailsScreen() {
   const [tab, setTab] = useState<TabKey>("details");
   const [galleryPreview, setGalleryPreview] = useState<string | null>(null);
   const { data: campaign, isLoading } = useCampaign(id!);
-  const { data: myApps = [] } = useMyApplications("all");
+  const { data: myApps = [], isLoading: checkingApplications } = useMyApplications("all");
   const { data: addresses = [] } = useAddresses();
   const apply = useApplyToCampaign();
   const saveAddress = useSaveAddress();
@@ -461,10 +461,10 @@ export default function CampaignDetailsScreen() {
         ) : null}
         <View className={campaign.product_url ? "flex-[1.3]" : "flex-1"}>
           <Button
-            label={!session ? "Log in to apply" : alreadyApplied ? "View Application" : slotsFull ? "Slots full" : amazonLimitReached ? "Limit reached" : "Apply Campaign"}
-            onPress={!session ? () => router.push("/(auth)/login") : alreadyApplied && myApp ? () => router.push(`/application/${myApp.id}`) : onApply}
-            loading={apply.isPending}
-            disabled={!!session && !alreadyApplied && (amazonLimitReached || slotsFull)}
+            label={!session ? "Log in to apply" : checkingApplications ? "Checking application…" : alreadyApplied ? "View Application" : slotsFull ? "Slots full" : amazonLimitReached ? "Limit reached" : "Apply Campaign"}
+            onPress={!session ? () => router.push("/(auth)/login") : checkingApplications ? () => {} : alreadyApplied && myApp ? () => router.push(`/application/${myApp.id}`) : onApply}
+            loading={apply.isPending || checkingApplications}
+            disabled={!!session && (checkingApplications || (!alreadyApplied && (amazonLimitReached || slotsFull)))}
             variant="primary"
             fullWidth
             rightIcon={<Ionicons name="arrow-forward" size={18} color="#fff" />}

@@ -159,7 +159,7 @@ export default function ApplicationReview() {
         : ""
     );
     setOrderDate(app.order_date ?? "");
-    setDeliveryDate(app.expected_delivery_at ?? "");
+    setDeliveryDate(app.expected_delivery_at?.slice(0, 10) ?? "");
     setSellerFeedback(app.seller_feedback ?? "");
     setSellerId(app.campaign?.seller_id ?? "");
     setDetailsLoadedFor(id ?? null);

@@ -86,7 +86,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // ignore
     }
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Clear local state even if the server session is already invalid.
+    }
     set({ session: null, profile: null });
   },
 }));
