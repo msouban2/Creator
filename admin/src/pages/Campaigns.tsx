@@ -107,6 +107,7 @@ export interface CampaignStats {
   total: number; // non-rejected applications
   applied: number; // status === 'applied' (awaiting selection)
   completed: number; // status === 'completed'
+  completedOrders: number; // reimbursement order approved or later
   claimedOrderSpend: number; // Σ purchase_amount (what creators reported paying)
   payout: number; // Σ payout_amount for completed (actual money released per creator)
   referral: number; // Σ referral-bonus transactions for the campaign
@@ -116,6 +117,7 @@ const EMPTY_STATS: CampaignStats = {
   total: 0,
   applied: 0,
   completed: 0,
+  completedOrders: 0,
   claimedOrderSpend: 0,
   payout: 0,
   referral: 0,
@@ -137,6 +139,9 @@ async function fetchCampaignStats(): Promise<Record<string, CampaignStats>> {
     const s = get(a.campaign_id);
     s.total += 1;
     if (a.status === "applied") s.applied += 1;
+    if (["order_approved", "product_received", "content_creation", "submitted", "review", "payment_in_progress", "completed"].includes(a.status)) {
+      s.completedOrders += 1;
+    }
     if (a.status === "completed") {
       s.completed += 1;
       s.payout += Number(a.payout_amount) || 0;
@@ -275,8 +280,8 @@ function CampaignOverview({ c, stats }: { c: Campaign; stats: CampaignStats }) {
         {isReimb ? (
           <>
             <Metric label="Total Orders" value={String(stats.total)} />
-            <Metric label="Completed Orders" value={String(stats.completed)} />
-            <Metric label="Pending Orders" value={String(stats.total - stats.completed)} />
+            <Metric label="Completed Orders" value={String(stats.completedOrders)} />
+            <Metric label="Pending Orders" value={String(stats.total - stats.completedOrders)} />
             <Metric label="Used Order Amount" value={formatCurrency(stats.payout)} accent />
             <Metric label="Referral Amount" value={formatCurrency(stats.referral)} />
             <Metric label="Claimed Spend" value={formatCurrency(stats.claimedOrderSpend)} />

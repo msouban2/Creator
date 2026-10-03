@@ -399,7 +399,11 @@ export default function CampaignDetail() {
   }
 
   const isReimb = campaign.campaign_type === "reimbursement";
-  const completed = active.filter((a) => a.status === "completed").length;
+  const completed = active.filter((a) =>
+    isReimb
+      ? ["order_approved", "product_received", "content_creation", "submitted", "review", "payment_in_progress", "completed"].includes(a.status)
+      : a.status === "completed"
+  ).length;
   const applied = active.filter((a) => a.status === "applied").length;
   const budget = campaign.budget != null && Number(campaign.budget) > 0
     ? Number(campaign.budget)
@@ -421,7 +425,7 @@ export default function CampaignDetail() {
         Product: campaign.product_name ?? campaign.title,
         ASIN: campaign.asin ?? "",
         "Order ID": a.order_id ?? "",
-        "Order Amount": Number(a.purchase_amount ?? campaign.reward_amount) || 0,
+        "Order Amount": a.purchase_amount == null ? "" : Number(a.purchase_amount),
         "Payout Amount": Number(a.payout_amount) || 0,
         "Added to Wallet": a.completed_at ? formatDate(a.completed_at) : "",
         Status: a.status === "completed" ? "Completed" : "In Progress",
@@ -588,7 +592,7 @@ export default function CampaignDetail() {
                         {campaign.asin ? <p className="font-mono text-[11px] text-slate-400">{campaign.asin}</p> : null}
                       </Td>
                       <Td>{a.order_id ?? "-"}</Td>
-                      <Td>{formatCurrency(a.purchase_amount ?? campaign.reward_amount)}</Td>
+                      <Td>{a.purchase_amount == null ? "—" : formatCurrency(a.purchase_amount)}</Td>
                       <Td><div><LinkCell bucket="purchase-orders" path={a.purchase_proof} /><div><Pill state={orderShotState(a)} /></div></div></Td>
                       <Td><div><LinkCell bucket="submission-videos" path={sub?.video_url} /><div><Pill state={sub?.video_url ? reviewState(a) : "none"} /></div></div></Td>
                       <Td><div>{sub?.seller_feedback_screenshot ? <LinkCell bucket="submission-screenshots" path={sub.seller_feedback_screenshot} /> : <LinkCell bucket="submission-videos" path={sub?.seller_feedback_video} />}<div><Pill state={sellerFb ? "approved" : "none"} /></div></div></Td>

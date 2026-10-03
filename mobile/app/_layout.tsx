@@ -232,21 +232,21 @@ function AuthGate() {
 
   useEffect(() => {
     if (!initialized) return;
-    const inAuthGroup = segments[0] === "(auth)";
+    const routeSegments = segments as readonly string[];
+    const inAuthGroup = routeSegments[0] === "(auth)";
     // `/auth/reset` and `/auth/callback` are deep-link landing screens that
     // establish their own session (password recovery / OAuth). Never redirect
     // them — otherwise the reset link bounces to login before the user can set
     // a new password.
-    const inAuthFlow = segments[0] === "auth";
-    const onVerifyPhone = inAuthGroup && (segments[1] as string) === "verify-phone";
+    const inAuthFlow = routeSegments[0] === "auth";
+    const onVerifyPhone = inAuthGroup && routeSegments[1] === "verify-phone";
 
     if (inAuthFlow) return;
 
     if (!session) {
-      const inCampaignBrowse = segments[0] === "campaign";
-      const routeSegments = segments as readonly string[];
-      const inPublicHome = !routeSegments.length || routeSegments[0] === "index" || (segments[0] === "(tabs)" && !segments[1]);
-      const inPublicCampaignList = segments[0] === "(tabs)" && segments[1] === "campaigns";
+      const inCampaignBrowse = routeSegments[0] === "campaign";
+      const inPublicHome = !routeSegments.length || routeSegments[0] === "index" || (routeSegments[0] === "(tabs)" && !routeSegments[1]);
+      const inPublicCampaignList = routeSegments[0] === "(tabs)" && routeSegments[1] === "campaigns";
       if (!inAuthGroup && !inCampaignBrowse && !inPublicHome && !inPublicCampaignList) router.replace("/(auth)/login");
       return;
     }

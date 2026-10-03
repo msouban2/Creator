@@ -110,8 +110,12 @@ export function useSubmitContent() {
       }
       const deliverables = application?.campaign?.deliverables?.toLowerCase() ?? "";
       const orderOnly = deliverables.includes("only order");
+      const requiresReviewScreenshot = deliverables.includes("review") || deliverables.includes("rating");
       if (campaignType === "reimbursement" && !orderOnly && !input.video_url) {
         throw new Error("Upload the review video required by this campaign before submitting.");
+      }
+      if (campaignType === "reimbursement" && requiresReviewScreenshot && !input.screenshots?.length) {
+        throw new Error("Upload a screenshot of your submitted review or rating before submitting.");
       }
       if (campaignType === "reimbursement" && deliverables.includes("seller feedback") && !input.seller_feedback_screenshot) {
         throw new Error("This campaign requires a seller feedback screenshot.");

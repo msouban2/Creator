@@ -9,6 +9,11 @@ export type CampaignSort = "recommended" | "latest" | "highest_reward";
 // creator app — not even in the raw API payload.
 export const CAMPAIGN_COLUMNS =
   "id, title, brand_name, campaign_type, campaign_image, campaign_images, description, deliverables, instructions, category, min_followers, max_followers, slots, reward_amount, cashback_percentage, application_deadline, campaign_deadline, product_url, product_name, asin, platform, review_upload_hours, sample_video_url, sample_screenshots, campaign_code, status, created_by, created_at, updated_at";
+const CAMPAIGN_COLUMNS_WITHOUT_GALLERY = CAMPAIGN_COLUMNS.replace("campaign_images, ", "");
+
+function isMissingGalleryColumn(error: { code?: string; message?: string }): boolean {
+  return error.message?.includes("campaign_images") === true;
+}
 
 export interface CampaignFilters {
   type: CampaignType;
@@ -18,10 +23,10 @@ export interface CampaignFilters {
   maxFollowers?: number | null;
 }
 
-async function fetchCampaigns(filters: CampaignFilters): Promise<Campaign[]> {
+function campaignsQuery(filters: CampaignFilters, columns: string) {
   let query = supabase
     .from("campaigns")
-    .select(CAMPAIGN_COLUMNS)
+    .select(columns)
     .eq("status", "active")
     .is("deleted_at", null)
     .eq("campaign_type", filters.type);
@@ -42,7 +47,14 @@ async function fetchCampaigns(filters: CampaignFilters): Promise<Campaign[]> {
       query = query.order("created_at", { ascending: false });
   }
 
-  const { data, error } = await query;
+  return query;
+}
+
+async function fetchCampaigns(filters: CampaignFilters): Promise<Campaign[]> {
+  let { data, error } = await campaignsQuery(filters, CAMPAIGN_COLUMNS);
+  if (error && isMissingGalleryColumn(error)) {
+    ({ data, error } = await campaignsQuery(filters, CAMPAIGN_COLUMNS_WITHOUT_GALLERY));
+  }
   if (error) throw error;
   // A campaign is "closed" once its deadline passes — hide those from the app
   // even if their stored status is still "active" (admin still sees them closed).
@@ -65,11 +77,18 @@ export function useCampaign(id: string) {
     queryKey: ["campaign", id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("campaigns")
         .select(CAMPAIGN_COLUMNS)
         .eq("id", id)
         .single();
+      if (error && isMissingGalleryColumn(error)) {
+        ({ data, error } = await supabase
+          .from("campaigns")
+          .select(CAMPAIGN_COLUMNS_WITHOUT_GALLERY)
+          .eq("id", id)
+          .single());
+      }
       if (error) throw error;
       return data as Campaign;
     },

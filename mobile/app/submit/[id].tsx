@@ -15,6 +15,7 @@ import { formatCurrency, formatDate } from "../../src/lib/format";
 import { SampleProofChip } from "../../src/components/SampleProof";
 import {
   SAMPLE_DELIVERY_DATE,
+  SAMPLE_REVIEW_SCREENSHOT,
   SAMPLE_REVIEW_VIDEO,
   SAMPLE_SELLER_FEEDBACK,
 } from "../../src/lib/samples";
@@ -35,6 +36,7 @@ export default function SubmitScreen() {
   const hasRating = deliverables.includes("rating");
   const hasReview = deliverables.includes("review");
   const requiresReviewVideo = isReimbursement && !isOnlyOrder;
+  const requiresReviewScreenshot = isReimbursement && (hasReview || hasRating);
   const requiresSellerFeedback = isReimbursement && deliverables.includes("seller feedback");
   const showSellerFeedback = isReimbursement && requiresSellerFeedback;
   const reviewVideoTitle = hasReview && hasRating
@@ -55,11 +57,13 @@ export default function SubmitScreen() {
   const [youtube, setYoutube] = useState("");
   const [notes, setNotes] = useState("");
   const [video, setVideo] = useState<string | null>(null);
+  const [reviewScreenshot, setReviewScreenshot] = useState<string | null>(null);
   const [sellerFeedbackShot, setSellerFeedbackShot] = useState<string | null>(null);
   const submissionLocked =
     submissionDateLocked ||
     deliveryPhotoMissing ||
     (requiresReviewVideo && !video) ||
+    (requiresReviewScreenshot && !reviewScreenshot) ||
     (requiresSellerFeedback && !sellerFeedbackShot);
 
   const upload = useUploadScreenshots();
@@ -110,6 +114,15 @@ export default function SubmitScreen() {
     }
   };
 
+  const pickReviewScreenshot = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: false,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets[0]) setReviewScreenshot(result.assets[0].uri);
+  };
+
   const onSubmitDeliveryPhoto = async () => {
     if (!deliveryImage) {
       Alert.alert("Add delivery proof", "Please select the delivered-date screenshot first.");
@@ -142,12 +155,19 @@ export default function SubmitScreen() {
       Alert.alert("Add review video", "Please upload your review video before submitting.");
       return;
     }
+    if (requiresReviewScreenshot && !reviewScreenshot) {
+      Alert.alert("Add review proof", "Please upload a screenshot of your submitted review or rating.");
+      return;
+    }
     if (isReimbursement && requiresSellerFeedback && !sellerFeedbackShot) {
       Alert.alert("Add seller feedback", "This campaign requires a seller feedback screenshot.");
       return;
     }
     try {
       const video_url = video ? await uploadVideo.mutateAsync(video) : undefined;
+      const screenshots = reviewScreenshot
+        ? await upload.mutateAsync([reviewScreenshot])
+        : [];
       const seller_feedback_screenshot = sellerFeedbackShot
         ? (await upload.mutateAsync([sellerFeedbackShot]))[0]
         : undefined;
@@ -158,7 +178,7 @@ export default function SubmitScreen() {
         story_url: story || undefined,
         youtube_url: youtube || undefined,
         notes: notes || undefined,
-        screenshots: [],
+        screenshots,
         video_url,
         seller_feedback_screenshot,
       });
@@ -332,8 +352,32 @@ export default function SubmitScreen() {
           </View>
         )}
 
+        {requiresReviewScreenshot ? (
+          <View className="gap-2">
+            <Text className="text-sm font-semibold text-ink">3. Review / rating screenshot</Text>
+            <Text className="text-xs text-ink-muted">Upload proof that you submitted the review or rating required by this campaign.</Text>
+            <SampleProofChip sample={SAMPLE_REVIEW_SCREENSHOT} />
+            {reviewScreenshot ? (
+              <View className="flex-row items-center justify-between rounded-2xl border border-primary-100 bg-white p-3">
+                <View className="flex-row items-center gap-3">
+                  <Image source={{ uri: reviewScreenshot }} className="h-12 w-12 rounded-xl" />
+                  <Text className="text-sm font-semibold text-ink">Review proof selected</Text>
+                </View>
+                <Pressable onPress={() => setReviewScreenshot(null)} className="h-8 w-8 items-center justify-center rounded-full bg-primary-50">
+                  <Ionicons name="close" size={16} color={colors.primary} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={pickReviewScreenshot} className="flex-row items-center justify-center gap-2 rounded-xl border border-dashed border-primary bg-primary-50 py-4">
+                <Ionicons name="image-outline" size={19} color={colors.primary} />
+                <Text className="text-sm font-semibold text-primary">Choose review / rating screenshot</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : null}
+
         {showSellerFeedback ? <View className="gap-2">
-          <Text className="text-sm font-semibold text-ink">3. Seller feedback screenshot</Text>
+          <Text className="text-sm font-semibold text-ink">4. Seller feedback screenshot</Text>
           <SampleProofChip sample={SAMPLE_SELLER_FEEDBACK} />
           <Text className="text-xs text-ink-muted">
             Upload the screenshot required by this campaign&apos;s deliverables.

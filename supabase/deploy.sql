@@ -194,9 +194,37 @@ create table if not exists public.notifications (
   title      text not null,
   message    text,
   type       text default 'general',
+  link       text,
   is_read    boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+create or replace function public.notify_creators_new_campaign()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status <> 'active' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and old.status = 'active' then
+    return new;
+  end if;
+
+  insert into public.notifications (user_id, title, message, type, link)
+  select p.id,
+         'New campaign available',
+         coalesce(new.brand_name, 'A brand') || ' launched ' || new.title || '.',
+         'campaign',
+         '/campaign/' || new.id::text
+  from public.profiles p
+  where p.role = 'creator';
+
+  return new;
+end $$;
+
+drop trigger if exists notify_creators_new_campaign_trg on public.campaigns;
+create trigger notify_creators_new_campaign_trg
+  after insert or update of status on public.campaigns
+  for each row execute function public.notify_creators_new_campaign();
 
 -- ---------- KYC ----------
 create table if not exists public.kyc (
@@ -598,6 +626,17 @@ create policy "profiles_insert_self" on public.profiles
 drop policy if exists "campaigns_read_active" on public.campaigns;
 create policy "campaigns_read_active" on public.campaigns
   for select using (status = 'active' or public.is_admin(auth.uid()));
+
+drop policy if exists "campaigns_read_existing_creator_app" on public.campaigns;
+create policy "campaigns_read_existing_creator_app" on public.campaigns
+  for select using (
+    exists (
+      select 1
+      from public.applications a
+      where a.campaign_id = campaigns.id
+        and a.creator_id = auth.uid()
+    )
+  );
 
 drop policy if exists "campaigns_admin_write" on public.campaigns;
 create policy "campaigns_admin_write" on public.campaigns

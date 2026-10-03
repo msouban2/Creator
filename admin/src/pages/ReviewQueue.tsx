@@ -250,9 +250,10 @@ type ReportRow = {
   id: string;
   note: string;
   created_at: string;
-  actor: { full_name: string | null } | null;
+  actor: { full_name: string | null; role: string | null } | null;
   application: {
-    campaign: { title: string | null; campaign_type: string | null } | null;
+    ref_no: number | null;
+    campaign: { title: string | null; campaign_code: string | null; campaign_type: string | null } | null;
     creator: { full_name: string | null } | null;
   } | null;
 };
@@ -371,7 +372,7 @@ export default function ReviewQueue() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("review_notes")
-        .select("id, note, created_at, actor:profiles!actor_id(full_name), application:applications(campaign:campaigns(title, campaign_type), creator:profiles!creator_id(full_name))")
+        .select("id, note, created_at, actor:profiles!actor_id(full_name, role), application:applications(ref_no, campaign:campaigns(title, campaign_code, campaign_type), creator:profiles!creator_id(full_name))")
         .eq("kind", "system")
         .order("created_at", { ascending: false })
         .limit(300);
@@ -812,6 +813,10 @@ export default function ReviewQueue() {
                   ? ` · ${current.application.campaign.brand_name}`
                   : ""}
               </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {current.application?.campaign?.campaign_code ? `Campaign code: ${current.application.campaign.campaign_code}` : "Campaign code: not set"}
+                {current.application?.ref_no != null ? ` · Application LRMS-${current.application.ref_no}` : ""}
+              </p>
               <NicheChips niches={current.application?.creator?.niches} className="mt-1.5" />
             </div>
             <span className="shrink-0 text-xs text-slate-400">
@@ -1129,7 +1134,9 @@ export default function ReviewQueue() {
             const byActor = new Map<string, number>();
             for (const r of report) {
               const name = r.actor?.full_name ?? "System / unknown";
-              byActor.set(name, (byActor.get(name) ?? 0) + 1);
+              const role = r.actor?.role ?? "system";
+              const key = `${role}:${name}`;
+              byActor.set(key, (byActor.get(key) ?? 0) + 1);
             }
             const leaderboard = [...byActor.entries()].sort((a, b) => b[1] - a[1]);
             return (
@@ -1141,19 +1148,22 @@ export default function ReviewQueue() {
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3 text-center">
                     <p className="text-2xl font-extrabold text-ink">{leaderboard.length}</p>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Reviewers</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">People in flow</p>
                   </div>
                 </div>
                 {leaderboard.length > 0 ? (
                   <div>
-                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Reviews per person</p>
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Actions per person</p>
                     <div className="space-y-1">
-                      {leaderboard.map(([name, n]) => (
-                        <div key={name} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
-                          <span className="font-medium text-ink">{name}</span>
+                      {leaderboard.map(([key, n]) => {
+                        const [role, name] = key.split(":");
+                        return (
+                        <div key={key} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
+                          <span className="font-medium text-ink">{name}<span className="ml-1 text-xs font-normal capitalize text-slate-400">{role}</span></span>
                           <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-primary">{n}</span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ) : null}
@@ -1164,10 +1174,16 @@ export default function ReviewQueue() {
                       {report.map((r) => (
                         <div key={r.id} className="rounded-lg border border-slate-100 px-3 py-2">
                           <p className="text-sm text-ink">{r.note}</p>
-                          <p className="mt-0.5 text-[11px] text-slate-400">
+                          <p className="mt-1 text-[11px] text-slate-500">
                             <span className="font-semibold text-slate-600">{r.actor?.full_name ?? "System"}</span>
+                            {r.actor?.role ? <span className="ml-1 capitalize text-slate-400">({r.actor.role})</span> : null}
                             {r.application?.creator?.full_name ? ` · ${r.application.creator.full_name}` : ""}
-                            {r.application?.campaign?.title ? ` · ${r.application.campaign.title}` : ""}
+                            {r.application?.ref_no != null ? ` · LRMS-${r.application.ref_no}` : ""}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-400">
+                            {r.application?.campaign?.campaign_code ? `${r.application.campaign.campaign_code} · ` : ""}
+                            {r.application?.campaign?.title ?? "Campaign"}
+                            {r.application?.campaign?.campaign_type ? ` · ${TYPE_LABEL[r.application.campaign.campaign_type as CampaignType] ?? r.application.campaign.campaign_type}` : ""}
                             {` · ${formatDate(r.created_at)}`}
                           </p>
                         </div>
