@@ -78,16 +78,16 @@ export async function resendSignupOtp(email: string) {
   if (error) throw error;
 }
 
-export async function signInWithGoogle() {
+async function signInWithOAuth(provider: "google" | "apple") {
   // No forced scheme: resolves to exp:// inside Expo Go and aaina:// in a build,
   // so the browser can return to whichever app is actually running.
   const redirectTo = createURL("auth/callback");
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
+    provider,
     options: { redirectTo, skipBrowserRedirect: true },
   });
   if (error) throw error;
-  if (!data?.url) throw new Error("Couldn't start Google sign-in.");
+  if (!data?.url) throw new Error(`Couldn't start ${provider === "apple" ? "Apple" : "Google"} sign-in.`);
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
   if (result.type !== "success" || !result.url) return;
@@ -114,6 +114,14 @@ export async function signInWithGoogle() {
   const errorDescription =
     url.searchParams.get("error_description") ?? hashParams.get("error_description");
   if (errorDescription) throw new Error(errorDescription);
+}
+
+export function signInWithGoogle() {
+  return signInWithOAuth("google");
+}
+
+export function signInWithAppleOAuth() {
+  return signInWithOAuth("apple");
 }
 
 export async function signInWithApple() {

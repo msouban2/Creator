@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, View, Pressable, Alert } from "react-native";
+import { ScrollView, Text, View, Pressable, Alert, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Input } from "../../src/components/ui/Input";
@@ -26,6 +26,7 @@ export default function ForgotPasswordScreen() {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [resetError, setResetError] = useState("");
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,6 +87,7 @@ export default function ForgotPasswordScreen() {
   };
 
   const onVerifyReset = async () => {
+    setResetError("");
     if (code.trim().length < 4) {
       Alert.alert("Enter the code", "Please enter the code we texted you.");
       return;
@@ -101,11 +103,11 @@ export default function ForgotPasswordScreen() {
     setBusy(true);
     try {
       await verifyResetOtp(phone.trim(), code.trim(), password);
-      Alert.alert("Password updated", "You can now log in with your new password.", [
-        { text: "Log in", onPress: () => router.replace("/(auth)/login") },
-      ]);
+      router.replace("/(auth)/login");
     } catch (e: any) {
-      Alert.alert("Couldn't reset password", e.message ?? "That code is invalid or expired.");
+      const message = e.message ?? "That code is invalid or expired.";
+      if (Platform.OS === "web") setResetError(message);
+      else Alert.alert("Couldn't reset password", message);
     } finally {
       setBusy(false);
     }
@@ -175,6 +177,9 @@ export default function ForgotPasswordScreen() {
             editable={step === "phone"}
             onChangeText={(t) => setPhone(t.replace(/[^0-9]/g, ""))}
           />
+          <Text className="text-xs text-ink-muted">
+            Reset codes are sent only to the verified phone number on an existing account. A different number cannot reset the password.
+          </Text>
 
           {step === "phone" ? (
             <Button label="Send Code" onPress={onSendOtp} loading={busy} fullWidth />
@@ -207,6 +212,11 @@ export default function ForgotPasswordScreen() {
                 value={confirm}
                 onChangeText={setConfirm}
               />
+              {resetError ? (
+                <Text accessibilityRole="alert" className="text-sm font-semibold text-red-700">
+                  {resetError}
+                </Text>
+              ) : null}
               <Button label="Reset Password" onPress={onVerifyReset} loading={busy} fullWidth />
 
               <View className="flex-row items-center justify-center gap-3">

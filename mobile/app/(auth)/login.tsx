@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, Text, View, Pressable, Alert, Platform } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useForm, Controller } from "react-hook-form";
@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
-import { signInWithApple, signInWithEmail, signInWithGoogle, signInWithPhone, resendSignupOtp } from "../../src/api/auth";
+import { signInWithApple, signInWithAppleOAuth, signInWithEmail, signInWithGoogle, signInWithPhone, resendSignupOtp } from "../../src/api/auth";
 import { colors } from "../../src/lib/theme";
 
 const schema = z.object({
@@ -21,15 +21,32 @@ type FormValues = z.infer<typeof schema>;
 
 export default function LoginScreen() {
   const router = useRouter();
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const previousOverflow = document.body.style.overflowY;
+    document.body.style.overflowY = "auto";
+    return () => {
+      document.body.style.overflowY = previousOverflow;
+    };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const onApple = async () => {
+    setAppleLoading(true);
+    setLoginError("");
     try {
-      await signInWithApple();
+      if (Platform.OS === "ios") await signInWithApple();
+      else await signInWithAppleOAuth();
     } catch (e: any) {
       if (e?.code !== "ERR_REQUEST_CANCELED") {
-        Alert.alert("Apple sign-in failed", e.message ?? "Try again.");
+        const message = e.message ?? "Try again.";
+        if (Platform.OS === "web") setLoginError(message);
+        else Alert.alert("Apple sign-in failed", message);
       }
+    } finally {
+      setAppleLoading(false);
     }
   };
   const { control, handleSubmit, formState: { errors } } = useForm<FormValues>({
@@ -39,6 +56,7 @@ export default function LoginScreen() {
 
   const onSubmit = async (values: FormValues) => {
     setLoading(true);
+    setLoginError("");
     const id = values.email.trim();
     const digits = id.replace(/[^0-9]/g, "");
     // Treat all-numeric input (10 or 12 digits, optional +/spaces) as a phone.
@@ -57,7 +75,9 @@ export default function LoginScreen() {
         router.push(`/(auth)/verify?email=${encodeURIComponent(id)}` as Href);
         return;
       }
-      Alert.alert("Login failed", msg || "Please check your credentials.");
+      const message = msg || "Please check your credentials.";
+      if (Platform.OS === "web") setLoginError(message);
+      else Alert.alert("Login failed", message);
     } finally {
       setLoading(false);
     }
@@ -76,7 +96,11 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView behavior="padding" className="flex-1 bg-canvas">
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
+      <ScrollView
+        style={{ flex: 1, minHeight: 0 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View className="items-center">
           <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary-100">
             <Ionicons name="gift" size={30} color={colors.primary} />
@@ -134,6 +158,12 @@ export default function LoginScreen() {
             </Pressable>
           </Link>
 
+          {loginError ? (
+            <Text accessibilityRole="alert" className="text-sm font-semibold text-red-700">
+              {loginError}
+            </Text>
+          ) : null}
+
           <Button label="Login" onPress={handleSubmit(onSubmit)} loading={loading} fullWidth />
 
           <View className="flex-row items-center gap-3">
@@ -158,7 +188,16 @@ export default function LoginScreen() {
               style={{ width: "100%", height: 48 }}
               onPress={onApple}
             />
-          ) : null}
+          ) : (
+            <Button
+              label="Continue with Apple"
+              variant="outline"
+              onPress={onApple}
+              loading={appleLoading}
+              fullWidth
+              leftIcon={<Ionicons name="logo-apple" size={18} color="#000" />}
+            />
+          )}
         </View>
 
         <View className="mt-6 flex-row items-center justify-center gap-1">

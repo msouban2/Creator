@@ -342,6 +342,10 @@ export interface Database {
         Args: { p_withdrawal: string; p_approve: boolean };
         Returns: undefined;
       };
+      complete_social_profile: {
+        Args: { p_niches: string[]; p_referral_code: string | null };
+        Returns: undefined;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

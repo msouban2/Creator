@@ -11,7 +11,7 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { NichePicker } from "../../src/components/NichePicker";
-import { signInWithApple, signUpWithEmail, signInWithGoogle } from "../../src/api/auth";
+import { signInWithApple, signInWithAppleOAuth, signUpWithEmail, signInWithGoogle } from "../../src/api/auth";
 import { getPendingReferralCode, clearPendingReferralCode } from "../../src/lib/referral";
 import { colors } from "../../src/lib/theme";
 
@@ -33,15 +33,33 @@ export default function SignupScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleError, setAppleError] = useState("");
   const [niches, setNiches] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const previousOverflow = document.body.style.overflowY;
+    document.body.style.overflowY = "auto";
+    return () => {
+      document.body.style.overflowY = previousOverflow;
+    };
+  }, []);
+
   const onApple = async () => {
+    setAppleLoading(true);
+    setAppleError("");
     try {
-      await signInWithApple();
+      if (Platform.OS === "ios") await signInWithApple();
+      else await signInWithAppleOAuth();
     } catch (e: any) {
       if (e?.code !== "ERR_REQUEST_CANCELED") {
-        Alert.alert("Apple sign-in failed", e.message ?? "Try again.");
+        const message = e.message ?? "Try again.";
+        if (Platform.OS === "web") setAppleError(message);
+        else Alert.alert("Apple sign-in failed", message);
       }
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -100,8 +118,17 @@ export default function SignupScreen() {
 
   return (
     <KeyboardAvoidingView behavior="padding" className="flex-1 bg-canvas">
-      <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 56 }}>
-        <Pressable onPress={() => router.back()} className="mb-4 self-start">
+      <ScrollView
+        style={{ flex: 1, minHeight: 0 }}
+        contentContainerStyle={{ padding: 24, paddingTop: 56, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace("/(auth)/login")}
+          accessibilityRole="button"
+          accessibilityLabel="Back to login"
+          className="mb-4 self-start"
+        >
           <Ionicons name="chevron-back" size={26} color={colors.ink} />
         </Pressable>
 
@@ -161,6 +188,11 @@ export default function SignupScreen() {
             fullWidth
             leftIcon={<Ionicons name="logo-google" size={18} color="#DB4437" />}
           />
+          {appleError ? (
+            <Text accessibilityRole="alert" className="text-sm font-semibold text-red-700">
+              {appleError}
+            </Text>
+          ) : null}
           {Platform.OS === "ios" ? (
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
@@ -169,7 +201,16 @@ export default function SignupScreen() {
               style={{ width: "100%", height: 48 }}
               onPress={onApple}
             />
-          ) : null}
+          ) : (
+            <Button
+              label="Continue with Apple"
+              variant="outline"
+              onPress={onApple}
+              loading={appleLoading}
+              fullWidth
+              leftIcon={<Ionicons name="logo-apple" size={18} color="#000" />}
+            />
+          )}
         </View>
 
         <View className="mt-6 flex-row items-center justify-center gap-1">

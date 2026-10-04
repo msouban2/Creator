@@ -85,6 +85,24 @@ export function useUpdateProfile() {
   });
 }
 
+export function useCompleteSocialProfile() {
+  const qc = useQueryClient();
+  const refresh = useAuthStore((s) => s.refreshProfile);
+  return useMutation({
+    mutationFn: async ({ niches, referralCode }: { niches: string[]; referralCode: string }) => {
+      const { error } = await supabase.rpc("complete_social_profile", {
+        p_niches: niches,
+        p_referral_code: referralCode || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await refresh();
+      qc.invalidateQueries({ queryKey: ["profile_stats"] });
+    },
+  });
+}
+
 export function useAddresses() {
   const userId = useAuthStore((s) => s.session?.user?.id);
   return useQuery({

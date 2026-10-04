@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Image, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import type { ImageResizeMode, ImageStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -23,9 +24,12 @@ function SampleViewer({ sample, onClose }: { sample: SampleProof | null; onClose
             </View>
             <Pressable
               onPress={onClose}
-              className="h-8 w-8 items-center justify-center rounded-full bg-primary-50"
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Close preview"
+              className="mt-2 h-11 w-11 items-center justify-center rounded-full bg-primary-50"
             >
-              <Ionicons name="close" size={16} color={colors.primary} />
+              <Ionicons name="close" size={20} color={colors.primary} />
             </Pressable>
           </View>
 
@@ -63,6 +67,30 @@ export function SampleProofChip({ sample }: { sample: SampleProof }) {
       >
         <Ionicons name="eye-outline" size={14} color={colors.primary} />
         <Text className="text-xs font-bold text-primary">See sample</Text>
+      </Pressable>
+      {open ? <SampleViewer sample={sample} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+export function SampleProofImage({
+  sample,
+  className,
+  style,
+  resizeMode = "contain",
+}: {
+  sample: SampleProof;
+  className?: string;
+  style?: ImageStyle;
+  resizeMode?: ImageResizeMode;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!sample.image) return null;
+
+  return (
+    <>
+      <Pressable onPress={() => setOpen(true)}>
+        <Image source={sample.image} className={className} style={style} resizeMode={resizeMode} />
       </Pressable>
       {open ? <SampleViewer sample={sample} onClose={() => setOpen(false)} /> : null}
     </>

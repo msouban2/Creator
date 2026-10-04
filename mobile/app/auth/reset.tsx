@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import * as Linking from "expo-linking";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +22,7 @@ export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     // A recovery session may also be delivered via the auth listener.
@@ -65,22 +66,26 @@ export default function ResetPassword() {
   }, [url]);
 
   const onSave = async () => {
+    setSaveError("");
     if (password.length < 6) {
-      Alert.alert("Weak password", "Use at least 6 characters.");
+      if (Platform.OS === "web") setSaveError("Use at least 6 characters.");
+      else Alert.alert("Weak password", "Use at least 6 characters.");
       return;
     }
     if (password !== confirm) {
-      Alert.alert("Passwords don't match", "Please re-enter the same password.");
+      if (Platform.OS === "web") setSaveError("Please re-enter the same password.");
+      else Alert.alert("Passwords don't match", "Please re-enter the same password.");
       return;
     }
     setSaving(true);
     try {
       await updatePassword(password);
-      Alert.alert("Password updated", "You can now use your new password.", [
-        { text: "Continue", onPress: () => router.replace("/(tabs)") },
-      ]);
+      await supabase.auth.signOut({ scope: "local" });
+      router.replace("/(auth)/login");
     } catch (e: any) {
-      Alert.alert("Couldn't update password", e.message ?? "Please try again.");
+      const message = e.message ?? "Please try again.";
+      if (Platform.OS === "web") setSaveError(message);
+      else Alert.alert("Couldn't update password", message);
     } finally {
       setSaving(false);
     }
@@ -145,6 +150,11 @@ export default function ResetPassword() {
           value={confirm}
           onChangeText={setConfirm}
         />
+        {saveError ? (
+          <Text accessibilityRole="alert" className="text-sm font-semibold text-red-700">
+            {saveError}
+          </Text>
+        ) : null}
         <Button label="Update Password" onPress={onSave} loading={saving} fullWidth />
       </View>
     </ScrollView>

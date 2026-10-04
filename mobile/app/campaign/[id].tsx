@@ -1,4 +1,4 @@
-import { Alert, Image, Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Image, Linking, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -104,8 +104,11 @@ export default function CampaignDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
+  const imageInset = Math.min(40, Math.max(20, viewportWidth * 0.06));
   const [tab, setTab] = useState<TabKey>("details");
   const [galleryPreview, setGalleryPreview] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const { data: campaign, isLoading } = useCampaign(id!);
   const { data: myApps = [], isLoading: checkingApplications } = useMyApplications("all");
   const { data: addresses = [] } = useAddresses();
@@ -129,6 +132,14 @@ export default function CampaignDetailsScreen() {
     );
   }
 
+  const productImages = Array.from(
+    new Set([campaign.campaign_image, ...(campaign.campaign_images ?? [])].filter((image): image is string => !!image))
+  );
+  const heroImage = selectedImage && productImages.includes(selectedImage) ? selectedImage : productImages[0] ?? null;
+  const imageAreaHeight = Math.min(
+    480,
+    Math.max(300, viewportWidth * 0.78 + (productImages.length > 0 ? 120 : 64))
+  );
   const myApp = myApps.find((a) => a.campaign_id === campaign.id);
   const alreadyApplied = !!myApp;
   // Slots are full when none remain and the creator hasn't already applied
@@ -230,33 +241,63 @@ export default function CampaignDetailsScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-        <View className="relative h-72 bg-white px-5 py-4">
-          <CampaignImage uri={campaign.campaign_image} className="h-full w-full rounded-2xl bg-white" resizeMode="contain" iconSize={48} />
-          <Pressable onPress={() => router.back()} style={{ top: insets.top + 4 }} className="absolute left-4 h-10 w-10 items-center justify-center rounded-full bg-white/90">
-            <Ionicons name="chevron-back" size={22} color={colors.ink} />
-          </Pressable>
+        <View
+          style={{
+            height: imageAreaHeight,
+            paddingHorizontal: imageInset,
+            paddingTop: insets.top + 8,
+            paddingBottom: 16,
+          }}
+          className="bg-white"
+        >
+          <View className="h-10 flex-row items-center justify-between">
+            <Pressable
+              onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)")}
+              accessibilityRole="button"
+              accessibilityLabel="Back to campaigns"
+              className="h-10 w-10 items-center justify-center rounded-full bg-white/90"
+            >
+              <Ionicons name="chevron-back" size={22} color={colors.ink} />
+            </Pressable>
+            <Pressable
+              onPress={() => shareCampaign(campaign, profile?.referral_code)}
+              className="h-10 w-10 items-center justify-center rounded-full bg-white/90"
+            >
+              <Ionicons name="share-social-outline" size={20} color={colors.primary} />
+            </Pressable>
+          </View>
+
+          {productImages.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mt-2 flex-grow-0"
+              style={{ height: 56 }}
+              contentContainerStyle={{ gap: 10, alignItems: "center" }}
+            >
+              {productImages.map((image) => (
+                <Pressable
+                  key={image}
+                  onPress={() => setSelectedImage(image)}
+                  className={`h-12 w-12 items-center justify-center rounded-xl border p-1 ${
+                    heroImage === image ? "border-primary bg-primary-50" : "border-primary-100 bg-white"
+                  }`}
+                >
+                  <Image source={{ uri: image }} className="h-full w-full rounded-lg" resizeMode="contain" />
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+
           <Pressable
-            onPress={() => shareCampaign(campaign, profile?.referral_code)}
-            style={{ top: insets.top + 4 }}
-            className="absolute right-4 h-10 w-10 items-center justify-center rounded-full bg-white/90"
+            onPress={() => heroImage && setGalleryPreview(heroImage)}
+            className="mt-2 flex-1"
+            accessibilityRole="button"
+            accessibilityLabel="Open product image full screen"
           >
-            <Ionicons name="share-social-outline" size={20} color={colors.primary} />
+            <CampaignImage uri={heroImage} className="h-full w-full rounded-2xl bg-white" resizeMode="contain" iconSize={48} />
           </Pressable>
         </View>
-
-        {campaign.campaign_images?.length ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12, gap: 10 }} className="bg-white">
-            {campaign.campaign_images.map((image, index) => (
-              <Pressable
-                key={`${image}-${index}`}
-                onPress={() => setGalleryPreview(image)}
-                className="h-20 w-20 items-center justify-center rounded-xl border border-primary-100 bg-white p-2"
-              >
-                <Image source={{ uri: image }} className="h-full w-full rounded-lg" resizeMode="contain" />
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : null}
 
         <Modal visible={!!galleryPreview} transparent={false} animationType="fade" onRequestClose={() => setGalleryPreview(null)}>
           <View className="flex-1 items-center justify-center bg-white p-5">
@@ -358,7 +399,7 @@ export default function CampaignDetailsScreen() {
                 </Section>
               ) : null}
 
-              {(campaign.sample_video_url || (campaign.sample_screenshots?.length ?? 0) > 0) ? (
+              {campaign.campaign_type !== "reimbursement" && (campaign.sample_video_url || (campaign.sample_screenshots?.length ?? 0) > 0) ? (
                 <Section title="Sample content">
                   <Text className="mb-2 text-xs text-ink-muted">Reference examples of what to create.</Text>
                   {campaign.sample_video_url ? (
@@ -384,17 +425,19 @@ export default function CampaignDetailsScreen() {
                 </Section>
               ) : null}
 
-              <Section title="Timeline">
-                <View className="gap-3">
-                  {campaign.campaign_deadline ? (
-                    <CountdownCard
-                      target={campaign.campaign_deadline}
-                      label="Campaign ends in"
-                    />
-                  ) : null}
-                  <Row icon="calendar-outline" label="Campaign deadline" value={formatDate(campaign.campaign_deadline)} />
-                </View>
-              </Section>
+              {campaign.campaign_type !== "reimbursement" ? (
+                <Section title="Timeline">
+                  <View className="gap-3">
+                    {campaign.campaign_deadline ? (
+                      <CountdownCard
+                        target={campaign.campaign_deadline}
+                        label="Campaign ends in"
+                      />
+                    ) : null}
+                    <Row icon="calendar-outline" label="Campaign deadline" value={formatDate(campaign.campaign_deadline)} />
+                  </View>
+                </Section>
+              ) : null}
             </TabCard>
           ) : null}
 

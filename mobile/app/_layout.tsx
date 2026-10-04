@@ -9,7 +9,7 @@ import type { Href } from "expo-router";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import { Animated, Easing, Text, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Animated, Easing, Platform, Text, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { queryClient } from "../src/lib/queryClient";
 import { useAuthStore } from "../src/store/auth";
 import { setPendingReferralCode } from "../src/lib/referral";
@@ -196,10 +196,11 @@ function useCaptureReferral() {
 function usePushNotifications(userId: string | undefined) {
   const router = useRouter();
   useEffect(() => {
-    if (userId) void registerForPush(userId);
+    if (Platform.OS !== "web" && userId) void registerForPush(userId);
   }, [userId]);
 
   useEffect(() => {
+    if (Platform.OS === "web") return;
     const go = (resp: Notifications.NotificationResponse | null) => {
       const link = (resp?.notification.request.content.data as { link?: string } | undefined)?.link;
       if (link && typeof link === "string" && link.startsWith("/")) {
@@ -240,21 +241,32 @@ function AuthGate() {
     // a new password.
     const inAuthFlow = routeSegments[0] === "auth";
     const onVerifyPhone = inAuthGroup && routeSegments[1] === "verify-phone";
+    const onCompleteProfile = inAuthGroup && routeSegments[1] === "complete-profile";
+    const appleSession =
+      session?.user.app_metadata.provider === "apple" ||
+      (session?.user.app_metadata.providers as string[] | undefined)?.includes("apple");
+    const socialSession = ["google", "apple"].some(
+      (provider) =>
+        session?.user.app_metadata.provider === provider ||
+        (session?.user.app_metadata.providers as string[] | undefined)?.includes(provider)
+    );
 
     if (inAuthFlow) return;
 
     if (!session) {
-      const inCampaignBrowse = routeSegments[0] === "campaign";
-      const inPublicHome = !routeSegments.length || routeSegments[0] === "index" || (routeSegments[0] === "(tabs)" && !routeSegments[1]);
-      const inPublicCampaignList = routeSegments[0] === "(tabs)" && routeSegments[1] === "campaigns";
-      if (!inAuthGroup && !inCampaignBrowse && !inPublicHome && !inPublicCampaignList) router.replace("/(auth)/login");
+      if (!inAuthGroup || onCompleteProfile) router.replace("/(auth)/login");
       return;
     }
 
     // Signed in but phone not verified yet — force the SMS OTP step first.
     // (Wait for the profile to load before deciding.)
-    if (profile && profile.phone_verified === false) {
+    if (profile && (profile.phone_verified === false || (appleSession && !profile.phone))) {
       if (!onVerifyPhone) router.replace("/(auth)/verify-phone" as Href);
+      return;
+    }
+
+    if (profile && socialSession && !profile.niches?.length) {
+      if (!onCompleteProfile) router.replace("/(auth)/complete-profile" as Href);
       return;
     }
 
