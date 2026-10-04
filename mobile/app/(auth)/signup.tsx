@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ScrollView, Text, View, Pressable, Alert, Platform } from "react-native";
+import { ScrollView, Text, View, Pressable, Alert, Linking, Platform } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +13,7 @@ import { Button } from "../../src/components/ui/Button";
 import { NichePicker } from "../../src/components/NichePicker";
 import { signInWithApple, signInWithAppleOAuth, signUpWithEmail, signInWithGoogle } from "../../src/api/auth";
 import { getPendingReferralCode, clearPendingReferralCode } from "../../src/lib/referral";
+import { PRIVACY_POLICY_URL } from "../../src/lib/links";
 import { colors } from "../../src/lib/theme";
 
 const schema = z.object({
@@ -219,6 +220,13 @@ export default function SignupScreen() {
             <Pressable><Text className="text-sm font-bold text-primary">Login</Text></Pressable>
           </Link>
         </View>
+        <Pressable
+          onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+          accessibilityRole="link"
+          className="mt-4 items-center py-2"
+        >
+          <Text className="text-sm font-semibold text-primary">Privacy Policy</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );

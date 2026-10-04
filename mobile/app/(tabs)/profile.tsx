@@ -1,4 +1,4 @@
-import { Alert, Platform, Pressable, ScrollView, StatusBar, Text, View } from "react-native";
+import { Alert, Linking, Platform, Pressable, ScrollView, StatusBar, Text, View } from "react-native";
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +13,7 @@ import { NichePicker } from "../../src/components/NichePicker";
 import { useAuthStore } from "../../src/store/auth";
 import { useProfileStats, useUpdateProfile } from "../../src/api/profile";
 import { colors } from "../../src/lib/theme";
+import { PRIVACY_POLICY_URL } from "../../src/lib/links";
 import { compactNumber, formatCurrency } from "../../src/lib/format";
 import { deleteAccount } from "../../src/api/auth";
 
@@ -343,6 +344,8 @@ export default function ProfileScreen() {
         <MenuItem icon="person-outline" label="Personal Information" onPress={() => router.push("/personal-info")} />
         <View className="h-px bg-primary-50" />
         <MenuItem icon="location-outline" label="Address" onPress={() => router.push("/address")} />
+        <View className="h-px bg-primary-50" />
+        <MenuItem icon="document-text-outline" label="Privacy Policy" onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} />
       </Card>
 
       <Pressable onPress={onLogout} className="mx-5 mt-4 flex-row items-center justify-center gap-2 rounded-2xl bg-primary-100 py-4">
