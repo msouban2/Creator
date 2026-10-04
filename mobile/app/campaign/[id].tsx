@@ -343,7 +343,9 @@ export default function CampaignDetailsScreen() {
               <Text className="text-sm font-semibold text-ink">
                 {slotsLeft <= 0
                   ? "Slots full — all spots are taken"
-                  : `${slotsLeft} of ${campaign.slots} slot${campaign.slots === 1 ? "" : "s"} left`}
+                  : campaign.campaign_type === "reimbursement"
+                    ? `${campaign.slots - slotsLeft} of ${campaign.slots} slot${campaign.slots === 1 ? "" : "s"} filled`
+                    : `${slotsLeft} of ${campaign.slots} slot${campaign.slots === 1 ? "" : "s"} left`}
               </Text>
             </View>
           ) : null}
