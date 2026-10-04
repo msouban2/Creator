@@ -55,6 +55,31 @@ function Pill({ state }: { state: "approved" | "pending" | "rejected" | "none" }
 }
 
 const ORDER_STAGES = ["ordered", "order_approved", "product_received", "content_creation", "submitted", "review", "payment_in_progress", "completed"];
+type OrderStatusFilter =
+  | "all"
+  | "order_screenshot"
+  | "review_recording"
+  | "seller_feedback"
+  | "payout_amount"
+  | "added_to_wallet";
+
+function filterCampaignOrders(apps: Application[], query: string, filter: OrderStatusFilter, asin: string | null) {
+  const search = query.trim().toLowerCase();
+  return apps.filter((app) => {
+    const submission = app.submissions?.[0];
+    if (filter === "order_screenshot" && !app.purchase_proof) return false;
+    if (filter === "review_recording" && !submission?.video_url) return false;
+    if (filter === "seller_feedback" && !(
+      app.seller_feedback || submission?.seller_feedback_screenshot || submission?.seller_feedback_video
+    )) return false;
+    if (filter === "payout_amount" && !(Number(app.payout_amount) > 0)) return false;
+    if (filter === "added_to_wallet" && !app.completed_at) return false;
+    if (!search) return true;
+    return [app.creator?.full_name, app.creator?.instagram_username, app.order_id, asin]
+      .some((value) => (value ?? "").toLowerCase().includes(search));
+  });
+}
+
 // Has the reimbursement order screenshot been approved yet?
 function orderShotState(a: Application): "approved" | "pending" | "rejected" | "none" {
   if (!a.purchase_proof && a.status !== "ordered") return "none";
@@ -391,7 +416,7 @@ export default function CampaignDetail() {
   const active = useMemo(() => apps.filter((a) => a.status !== "rejected"), [apps]);
   const [tab, setTab] = useState<"main" | "shipper" | "content" | "reports">("main");
   const [orderSearch, setOrderSearch] = useState("");
-  const [orderStatus, setOrderStatus] = useState<"all" | "order_screenshot" | "order_approved">("all");
+  const [orderStatus, setOrderStatus] = useState<OrderStatusFilter>("all");
   const [contentFilter, setContentFilter] = useState<"all" | "draft" | "live" | "rejected_draft">("all");
 
   if (isLoading || !campaign) {
@@ -416,7 +441,7 @@ export default function CampaignDetail() {
   const onExport = () => {
     const codeSafe = (campaign.title || "campaign").replace(/[^\w-]+/g, "_").slice(0, 40);
     if (isReimb) {
-      const rows = active.map((a, i) => ({
+      const rows = filterCampaignOrders(active, orderSearch, orderStatus, campaign.asin).map((a, i) => ({
         "#": i + 1,
         "Order Date": a.applied_at ? formatDate(a.applied_at) : "",
         "Delivery Date": a.expected_delivery_at ? formatDate(a.expected_delivery_at) : "",
@@ -560,7 +585,10 @@ export default function CampaignDetail() {
               >
                 <option value="all">Everything</option>
                 <option value="order_screenshot">Order Screenshot</option>
-                <option value="order_approved">Order Approved</option>
+                <option value="review_recording">Review Recording</option>
+                <option value="seller_feedback">Seller Feedback</option>
+                <option value="payout_amount">Payout Amount</option>
+                <option value="added_to_wallet">Added to Wallet</option>
               </select>
             </div>
           </div>
@@ -575,17 +603,7 @@ export default function CampaignDetail() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {(() => {
-                const q = orderSearch.trim().toLowerCase();
-                const approvedOrderStatuses = [
-                  "order_approved", "product_received", "content_creation", "submitted",
-                  "review", "payment_in_progress", "completed",
-                ];
-                const orders = active.filter((a) => {
-                  if (orderStatus === "order_screenshot" && !a.purchase_proof) return false;
-                  if (orderStatus === "order_approved" && !approvedOrderStatuses.includes(a.status)) return false;
-                  if (!q) return true;
-                  return [a.creator?.full_name, a.creator?.instagram_username, a.order_id, campaign.asin].some((v) => (v ?? "").toLowerCase().includes(q));
-                });
+                const orders = filterCampaignOrders(active, orderSearch, orderStatus, campaign.asin);
                 if (orders.length === 0) return <tr><Td className="text-center text-slate-400">No orders match.</Td></tr>;
                 return orders.map((a, i) => {
                   const sub = a.submissions?.[0];
