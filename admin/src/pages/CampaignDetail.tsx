@@ -391,7 +391,7 @@ export default function CampaignDetail() {
   const active = useMemo(() => apps.filter((a) => a.status !== "rejected"), [apps]);
   const [tab, setTab] = useState<"main" | "shipper" | "content" | "reports">("main");
   const [orderSearch, setOrderSearch] = useState("");
-  const [orderStatus, setOrderStatus] = useState<"all" | "completed" | "in_progress">("all");
+  const [orderStatus, setOrderStatus] = useState<"all" | "order_screenshot" | "order_approved">("all");
   const [contentFilter, setContentFilter] = useState<"all" | "draft" | "live" | "rejected_draft">("all");
 
   if (isLoading || !campaign) {
@@ -558,9 +558,9 @@ export default function CampaignDetail() {
                 onChange={(e) => setOrderStatus(e.target.value as typeof orderStatus)}
                 className="h-9 rounded-full border border-slate-200 px-3 text-sm text-slate-600 outline-none focus:border-primary"
               >
-                <option value="all">All status</option>
-                <option value="completed">Completed</option>
-                <option value="in_progress">In Progress</option>
+                <option value="all">Everything</option>
+                <option value="order_screenshot">Order Screenshot</option>
+                <option value="order_approved">Order Approved</option>
               </select>
             </div>
           </div>
@@ -576,9 +576,13 @@ export default function CampaignDetail() {
             <tbody className="divide-y divide-slate-50">
               {(() => {
                 const q = orderSearch.trim().toLowerCase();
+                const approvedOrderStatuses = [
+                  "order_approved", "product_received", "content_creation", "submitted",
+                  "review", "payment_in_progress", "completed",
+                ];
                 const orders = active.filter((a) => {
-                  if (orderStatus === "completed" && a.status !== "completed") return false;
-                  if (orderStatus === "in_progress" && a.status === "completed") return false;
+                  if (orderStatus === "order_screenshot" && !a.purchase_proof) return false;
+                  if (orderStatus === "order_approved" && !approvedOrderStatuses.includes(a.status)) return false;
                   if (!q) return true;
                   return [a.creator?.full_name, a.creator?.instagram_username, a.order_id, campaign.asin].some((v) => (v ?? "").toLowerCase().includes(q));
                 });
