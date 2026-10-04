@@ -1,30 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
+import type { Session } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
 import { supabase } from "../../src/lib/supabase";
 import { useAuthStore } from "../../src/store/auth";
 import { colors } from "../../src/lib/theme";
-
-// After a Google (OAuth) sign-in the profile row is created by a DB trigger,
-// which can lag a moment for a brand-new account. Poll briefly so we can read
-// phone_verified and route correctly instead of dropping unverified users into
-// the app.
-async function fetchPhoneVerified(userId: string): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("phone_verified")
-      .eq("id", userId)
-      .single();
-    if (data) return (data as { phone_verified: boolean }).phone_verified === true;
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  // Profile still not found — treat as unverified so they go through the SMS
-  // step rather than skipping it.
-  return false;
-}
 
 /**
  * Landing screen for the OAuth redirect (e.g. Google). Supabase sends the
@@ -34,39 +16,106 @@ async function fetchPhoneVerified(userId: string): Promise<boolean> {
  * phone verification first; everyone else goes into the app.
  */
 export default function AuthCallback() {
-  const url = Linking.useURL();
+  const routed = useRef(false);
 
   useEffect(() => {
-    (async () => {
-      if (!url) return;
-      let next: Href = "/(tabs)";
-      try {
-        const parsed = new URL(url);
+    let active = true;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
 
-        const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
-        const access_token = hashParams.get("access_token");
-        const refresh_token = hashParams.get("refresh_token");
-
-        if (access_token && refresh_token) {
-          await supabase.auth.setSession({ access_token, refresh_token });
-        } else {
-          const code = parsed.searchParams.get("code");
-          if (code) await supabase.auth.exchangeCodeForSession(code);
-        }
-
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await useAuthStore.getState().refreshProfile();
-          const verified = await fetchPhoneVerified(user.id);
-          if (!verified) next = "/(auth)/verify-phone" as Href;
-        }
-      } catch {
-        // If parsing fails we still leave the loading screen below.
-      } finally {
-        router.replace(next);
+    const routeFromSession = async (session: Session | null) => {
+      if (!active || routed.current) return;
+      routed.current = true;
+      if (!session) {
+        router.replace("/(auth)/login");
+        return;
       }
-    })();
-  }, [url]);
+
+      useAuthStore.getState().setSession(session);
+      await Promise.race([
+        useAuthStore.getState().refreshProfile(),
+        new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+      ]);
+      if (!active) return;
+
+      const profile = useAuthStore.getState().profile;
+      const providers = session.user.app_metadata.providers as string[] | undefined;
+      const appleSession = session.user.app_metadata.provider === "apple" || providers?.includes("apple");
+      const socialSession = appleSession || session.user.app_metadata.provider === "google" || providers?.includes("google");
+
+      if (!profile?.phone_verified || (appleSession && !profile.phone)) {
+        router.replace("/(auth)/verify-phone" as Href);
+      } else if (socialSession && !profile.niches?.length) {
+        router.replace("/(auth)/complete-profile" as Href);
+      } else {
+        router.replace("/(tabs)");
+      }
+    };
+
+    const getSession = async () => {
+      const sessionPromise = supabase.auth.getSession().then(({ data }) => data.session);
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
+      return (await Promise.race([sessionPromise, timeoutPromise])) ?? useAuthStore.getState().session;
+    };
+
+    const handleUrl = async (incomingUrl: string | null) => {
+      if (!active || routed.current) return;
+
+      try {
+        let session: Session | null = null;
+        if (incomingUrl) {
+          const parsed = new URL(incomingUrl);
+          const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+
+          if (accessToken && refreshToken) {
+            const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+            if (error) throw error;
+            session = data.session;
+          } else {
+            const code = parsed.searchParams.get("code");
+            if (code) {
+              const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+              if (error) throw error;
+              session = data.session;
+            }
+          }
+        }
+
+        session ??= await getSession();
+        await routeFromSession(session);
+      } catch {
+        await routeFromSession(await getSession());
+      }
+    };
+
+    const urlSubscription = Linking.addEventListener("url", ({ url: incomingUrl }) => {
+      void handleUrl(incomingUrl);
+    });
+    const { data: authSubscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) setTimeout(() => void routeFromSession(session), 0);
+    });
+
+    void Linking.getInitialURL().then((initialUrl) => {
+      if (initialUrl) {
+        void handleUrl(initialUrl);
+        return;
+      }
+      void getSession().then((session) => {
+        if (session) void routeFromSession(session);
+        else fallbackTimer = setTimeout(() => void handleUrl(null), 8000);
+      });
+    }).catch(() => {
+      fallbackTimer = setTimeout(() => void handleUrl(null), 8000);
+    });
+
+    return () => {
+      active = false;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      urlSubscription.remove();
+      authSubscription.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.canvas }}>

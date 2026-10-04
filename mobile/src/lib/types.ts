@@ -346,6 +346,10 @@ export interface Database {
         Args: { p_niches: string[]; p_referral_code: string | null };
         Returns: undefined;
       };
+        campaign_slot_summary: {
+          Args: { p_campaign: string };
+          Returns: Json;
+        };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

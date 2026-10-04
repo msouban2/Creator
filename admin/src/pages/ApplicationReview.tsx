@@ -73,11 +73,14 @@ export default function ApplicationReview() {
   // Where to return after acting / pressing Back — defaults to the applications
   // list, but respects where the review was opened from (e.g. the Review Queue).
   const fromParam = searchParams.get("from");
+  const campaignId = searchParams.get("campaignId");
   const backTo =
     fromParam === "review-queue"
       ? "/review-queue"
       : fromParam === "employee-stats"
         ? "/employee-stats"
+        : fromParam === "campaign-detail" && campaignId
+          ? `/campaigns/${campaignId}`
         : readonly
           ? "/submissions"
           : "/applications";
@@ -86,6 +89,8 @@ export default function ApplicationReview() {
       ? "review queue"
       : fromParam === "employee-stats"
         ? "employee stats"
+        : fromParam === "campaign-detail"
+          ? "campaign"
         : readonly
           ? "submissions"
           : "applications";

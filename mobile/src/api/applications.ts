@@ -89,7 +89,7 @@ export function useApplyToCampaign() {
         if (error.message?.includes("CAMPAIGN_SLOTS_FULL")) {
           throw new Error(
             campaignType === "reimbursement"
-              ? "This campaign is full — all order slots are approved. A slot may reopen if an approved order is rejected."
+              ? "No order slots are currently available. A slot may reopen when an order hold expires or a screenshot is rejected."
               : "This campaign is full — all slots are taken. A slot may free up if an application is rejected, so check back later."
           );
         }
@@ -101,6 +101,7 @@ export function useApplyToCampaign() {
       qc.invalidateQueries({ queryKey: ["applications"] });
       qc.invalidateQueries({ queryKey: ["amazon-quota"] });
       qc.invalidateQueries({ queryKey: ["campaign-slots"] });
+      qc.invalidateQueries({ queryKey: ["campaign-slot-summary"] });
     },
   });
 }
@@ -117,6 +118,56 @@ export function useCampaignSlotsLeft(campaignId: string | undefined) {
       const { data, error } = await supabase.rpc("campaign_slots_left", { p_campaign: campaignId });
       if (error) throw error;
       return Number(data ?? 0);
+    },
+  });
+}
+
+export interface CampaignSlotSummary {
+  total: number;
+  approved: number;
+  purchaseWindow: number;
+  awaitingReview: number;
+  reupload: number;
+  reserved: number;
+  available: number;
+}
+
+export function useCampaignSlotSummary(campaignId: string | undefined, campaignSlots: number, campaignType?: string) {
+  return useQuery({
+    queryKey: ["campaign-slot-summary", campaignId, campaignType, campaignSlots],
+    enabled: !!campaignId && !!campaignType,
+    refetchInterval: 15_000,
+    retry: false,
+    queryFn: async (): Promise<CampaignSlotSummary> => {
+      const { data, error } = await supabase.rpc("campaign_slot_summary", { p_campaign: campaignId });
+      if (error) {
+        if (campaignType === "reimbursement") throw error;
+        const { data: legacySlotsLeft, error: legacyError } = await supabase.rpc("campaign_slots_left", { p_campaign: campaignId });
+        if (legacyError) throw error;
+        const available = Number(legacySlotsLeft ?? 0);
+        return {
+          total: campaignSlots,
+          approved: Math.max(campaignSlots - available, 0),
+          purchaseWindow: 0,
+          awaitingReview: 0,
+          reupload: 0,
+          reserved: 0,
+          available,
+        };
+      }
+      const summary = (data ?? {}) as Partial<CampaignSlotSummary>;
+      const purchaseWindow = Number(summary.purchase_window ?? summary.purchaseWindow ?? 0);
+      const awaitingReview = Number(summary.awaiting_review ?? summary.awaitingReview ?? 0);
+      const reupload = Number(summary.reupload ?? 0);
+      return {
+        total: Number(summary.total ?? 0),
+        approved: Number(summary.approved ?? 0),
+        purchaseWindow,
+        awaitingReview,
+        reupload,
+        reserved: Number(summary.reserved ?? purchaseWindow + awaitingReview + reupload),
+        available: Number(summary.available ?? 0),
+      };
     },
   });
 }
@@ -220,6 +271,7 @@ export function useStartOrderWindow() {
     onSuccess: (_data, applicationId) => {
       qc.invalidateQueries({ queryKey: ["applications"] });
       qc.invalidateQueries({ queryKey: ["application", applicationId] });
+      qc.invalidateQueries({ queryKey: ["campaign-slot-summary"] });
     },
   });
 }
@@ -249,6 +301,7 @@ export function useSubmitOrderScreenshot() {
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ["applications"] });
       qc.invalidateQueries({ queryKey: ["application", input.applicationId] });
+      qc.invalidateQueries({ queryKey: ["campaign-slot-summary"] });
     },
   });
 }

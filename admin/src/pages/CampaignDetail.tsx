@@ -414,6 +414,7 @@ export default function CampaignDetail() {
   });
 
   const active = useMemo(() => apps.filter((a) => a.status !== "rejected"), [apps]);
+  const approvedOrders = useMemo(() => active.filter((a) => orderShotState(a) === "approved"), [active]);
   const [tab, setTab] = useState<"main" | "shipper" | "content" | "reports">("main");
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatus, setOrderStatus] = useState<OrderStatusFilter>("all");
@@ -429,6 +430,7 @@ export default function CampaignDetail() {
       ? ["order_approved", "product_received", "content_creation", "submitted", "review", "payment_in_progress", "completed"].includes(a.status)
       : a.status === "completed"
   ).length;
+  const totalOrders = Math.max(Number(campaign.slots ?? active.length) || 0, 0);
   const applied = active.filter((a) => a.status === "applied").length;
   const budget = campaign.budget != null && Number(campaign.budget) > 0
     ? Number(campaign.budget)
@@ -441,7 +443,7 @@ export default function CampaignDetail() {
   const onExport = () => {
     const codeSafe = (campaign.title || "campaign").replace(/[^\w-]+/g, "_").slice(0, 40);
     if (isReimb) {
-      const rows = filterCampaignOrders(active, orderSearch, orderStatus, campaign.asin).map((a, i) => ({
+      const rows = filterCampaignOrders(approvedOrders, orderSearch, orderStatus, campaign.asin).map((a, i) => ({
         "#": i + 1,
         "Order Date": a.applied_at ? formatDate(a.applied_at) : "",
         "Delivery Date": a.expected_delivery_at ? formatDate(a.expected_delivery_at) : "",
@@ -526,9 +528,9 @@ export default function CampaignDetail() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {isReimb ? (
           <>
-            <StatCard icon={ShoppingCart} label="Total Orders" value={String(active.length)} />
+            <StatCard icon={ShoppingCart} label="Total Orders" value={String(totalOrders)} />
             <StatCard icon={CheckCircle2} label="Completed Orders" value={String(completed)} />
-            <StatCard icon={Clock} label="Pending Orders" value={String(active.length - completed)} />
+            <StatCard icon={Clock} label="Pending Orders" value={String(Math.max(totalOrders - completed, 0))} />
             <StatCard icon={IndianRupee} label="Campaign Budget" value={formatCurrency(budget)} />
             <StatCard icon={Wallet} label="Used Order Amount" value={formatCurrency(payout)} />
             <StatCard icon={Gift} label="Referral Amount" value={formatCurrency(referralAmount)} />
@@ -567,7 +569,7 @@ export default function CampaignDetail() {
       {isReimb && (
         <div className="rounded-2xl border border-slate-100 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-3">
-            <p className="text-sm font-bold text-primary">Orders ({active.length})</p>
+            <p className="text-sm font-bold text-primary">Orders ({approvedOrders.length})</p>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <ExternalLink size={14} className="absolute left-3 top-1/2 hidden -translate-y-1/2 text-slate-400" />
@@ -593,17 +595,17 @@ export default function CampaignDetail() {
             </div>
           </div>
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[1400px]">
+          <table className="w-full min-w-[1540px]">
             <thead className="border-b border-slate-100 bg-slate-50/60">
               <tr>
                 <Th>#</Th><Th>Order Date</Th><Th>Delivery Date</Th><Th>Creator</Th><Th>Product / ASIN</Th><Th>Order ID</Th><Th>Order Amount</Th>
                 <Th>Order Screenshot</Th><Th>Review Recording</Th><Th>Seller Feedback</Th>
-                <Th>Payout Amount</Th><Th>Added to Wallet</Th><Th>Payment Screenshot</Th><Th>Status</Th>
+                <Th>Payout Amount</Th><Th>Added to Wallet</Th><Th>Payment Screenshot</Th><Th>Status</Th><Th>Action</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {(() => {
-                const orders = filterCampaignOrders(active, orderSearch, orderStatus, campaign.asin);
+                const orders = filterCampaignOrders(approvedOrders, orderSearch, orderStatus, campaign.asin);
                 if (orders.length === 0) return <tr><Td className="text-center text-slate-400">No orders match.</Td></tr>;
                 return orders.map((a, i) => {
                   const sub = a.submissions?.[0];
@@ -627,6 +629,15 @@ export default function CampaignDetail() {
                       <Td>{a.completed_at ? formatDate(a.completed_at) : "-"}</Td>
                       <Td><span className="text-slate-300">-</span></Td>
                       <Td><Badge variant={a.status === "completed" ? "success" : "warning"}>{a.status === "completed" ? "Completed" : "In Progress"}</Badge></Td>
+                      <Td>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/applications/${a.id}/review?from=campaign-detail&campaignId=${id}`)}
+                        >
+                          <Eye size={14} /> View Application
+                        </Button>
+                      </Td>
                     </tr>
                   );
                 });

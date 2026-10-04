@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useCampaign } from "../../src/api/campaigns";
-import { useApplyToCampaign, useMyApplications, useAmazonQuota, isAmazonProductUrl, useCampaignSlotsLeft } from "../../src/api/applications";
+import { useApplyToCampaign, useMyApplications, useAmazonQuota, isAmazonProductUrl, useCampaignSlotSummary } from "../../src/api/applications";
 import { useAddresses, useSaveAddress } from "../../src/api/profile";
 import { Button } from "../../src/components/ui/Button";
 import { Input } from "../../src/components/ui/Input";
@@ -118,11 +118,14 @@ export default function CampaignDetailsScreen() {
   const session = useAuthStore((s) => s.session);
   const [addressSheet, setAddressSheet] = useState(false);
   const [addr, setAddr] = useState({ name: "", phone: "", address: "", city: "", state: "", postal_code: "" });
+  const isReimbursement = campaign?.campaign_type === "reimbursement";
   const isAmazonReimbursement =
-    campaign?.campaign_type === "reimbursement" && isAmazonProductUrl(campaign?.product_url);
+    isReimbursement && isAmazonProductUrl(campaign?.product_url);
   const { data: quota } = useAmazonQuota();
   const amazonLimitReached = !!(isAmazonReimbursement && quota && quota.remaining <= 0);
-  const { data: slotsLeft } = useCampaignSlotsLeft(id);
+  const { data: slotSummary, error: slotSummaryError, isLoading: slotSummaryLoading } =
+    useCampaignSlotSummary(id, campaign?.slots ?? 0, campaign?.campaign_type);
+  const currentSlotSummary = slotSummaryError ? undefined : slotSummary;
 
   if (isLoading || !campaign) {
     return (
@@ -142,9 +145,22 @@ export default function CampaignDetailsScreen() {
   );
   const myApp = myApps.find((a) => a.campaign_id === campaign.id);
   const alreadyApplied = !!myApp;
-  // Slots are full when none remain and the creator hasn't already applied
-  // (their own application already holds a slot, so they can still view it).
-  const slotsFull = !alreadyApplied && slotsLeft != null && slotsLeft <= 0;
+  // A creator who already applied can still open their campaign progress.
+  const slotsFull = !alreadyApplied && currentSlotSummary != null && currentSlotSummary.available <= 0;
+  const ordersFullyApproved = !!currentSlotSummary && currentSlotSummary.approved >= currentSlotSummary.total;
+  const slotBreakdown = currentSlotSummary
+    ? (() => {
+        const detailedReserved = currentSlotSummary.purchaseWindow + currentSlotSummary.awaitingReview + currentSlotSummary.reupload;
+        return [
+        `${currentSlotSummary.approved} of ${currentSlotSummary.total} orders approved`,
+        currentSlotSummary.purchaseWindow ? `${currentSlotSummary.purchaseWindow} in 15-min window` : null,
+        currentSlotSummary.awaitingReview ? `${currentSlotSummary.awaitingReview} awaiting review` : null,
+        currentSlotSummary.reupload ? `${currentSlotSummary.reupload} reupload hold` : null,
+        currentSlotSummary.reserved > detailedReserved ? `${currentSlotSummary.reserved - detailedReserved} reserved` : null,
+        currentSlotSummary.available ? `${currentSlotSummary.available} available` : null,
+        ].filter(Boolean).join(" · ");
+      })()
+    : "";
   const reimbursementTotal = campaign.reward_amount + campaign.cashback_percentage;
   const needsFollowers = campaign.campaign_type !== "reimbursement";
   const needsAddress = campaign.campaign_type === "barter" || campaign.campaign_type === "paid";
@@ -329,23 +345,29 @@ export default function CampaignDetailsScreen() {
             ) : null}
           </View>
 
-          {!alreadyApplied && slotsLeft != null ? (
+          {campaign.campaign_type === "reimbursement" || currentSlotSummary != null ? (
             <View
               className={`mt-4 flex-row items-center gap-2 rounded-2xl border p-3 ${
-                slotsLeft <= 0 ? "border-red-200 bg-red-50" : "border-primary-100 bg-primary-50"
+                currentSlotSummary && currentSlotSummary.available <= 0 ? "border-red-200 bg-red-50" : "border-primary-100 bg-primary-50"
               }`}
             >
               <Ionicons
-                name={slotsLeft <= 0 ? "lock-closed" : "people-outline"}
+                name={currentSlotSummary && currentSlotSummary.available <= 0 ? "lock-closed" : "people-outline"}
                 size={16}
-                color={slotsLeft <= 0 ? "#dc2626" : colors.primary}
+                color={currentSlotSummary && currentSlotSummary.available <= 0 ? "#dc2626" : colors.primary}
               />
-              <Text className="text-sm font-semibold text-ink">
-                {slotsLeft <= 0
-                  ? "Slots full — all spots are taken"
+              <Text className="flex-1 text-sm font-semibold text-ink">
+                {!currentSlotSummary
+                  ? slotSummaryError
+                    ? "Order slot availability is temporarily unavailable. Apply is disabled until it reconnects."
+                    : "Checking approved orders and temporary holds…"
                   : campaign.campaign_type === "reimbursement"
-                    ? `${campaign.slots - slotsLeft} of ${campaign.slots} slot${campaign.slots === 1 ? "" : "s"} filled`
-                    : `${slotsLeft} of ${campaign.slots} slot${campaign.slots === 1 ? "" : "s"} left`}
+                    ? ordersFullyApproved
+                      ? "Orders full — better luck next time"
+                      : slotBreakdown
+                  : currentSlotSummary.available <= 0
+                    ? "Slots full — all spots are taken"
+                    : `${currentSlotSummary.available} of ${currentSlotSummary.total} slots left`}
               </Text>
             </View>
           ) : null}
@@ -506,10 +528,10 @@ export default function CampaignDetailsScreen() {
         ) : null}
         <View className={campaign.product_url ? "flex-[1.3]" : "flex-1"}>
           <Button
-            label={!session ? "Log in to apply" : checkingApplications ? "Checking application…" : alreadyApplied ? "View Application" : slotsFull ? "Slots full" : amazonLimitReached ? "Limit reached" : "Apply Campaign"}
+            label={!session ? "Log in to apply" : checkingApplications ? "Checking application…" : alreadyApplied ? "View Application" : isReimbursement && !currentSlotSummary ? (slotSummaryLoading ? "Checking slots…" : "Slots unavailable") : slotsFull ? (isReimbursement ? ordersFullyApproved ? "Orders full" : "Slots reserved" : "Slots full") : amazonLimitReached ? "Limit reached" : "Apply Campaign"}
             onPress={!session ? () => router.push("/(auth)/login") : checkingApplications ? () => {} : alreadyApplied && myApp ? () => router.push(`/application/${myApp.id}`) : onApply}
             loading={apply.isPending || checkingApplications}
-            disabled={!!session && (checkingApplications || (!alreadyApplied && (amazonLimitReached || slotsFull)))}
+            disabled={!!session && (checkingApplications || (!alreadyApplied && (isReimbursement && !currentSlotSummary || amazonLimitReached || slotsFull)))}
             variant="primary"
             fullWidth
             rightIcon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
