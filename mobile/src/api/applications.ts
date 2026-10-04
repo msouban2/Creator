@@ -87,7 +87,11 @@ export function useApplyToCampaign() {
           throw new Error("You've reached the limit of 5 Amazon-product campaigns this month. Try again next month.");
         }
         if (error.message?.includes("CAMPAIGN_SLOTS_FULL")) {
-          throw new Error("This campaign is full — all slots are taken. A slot may free up if an application is rejected, so check back later.");
+          throw new Error(
+            campaignType === "reimbursement"
+              ? "This campaign is full — all order slots are approved. A slot may reopen if an approved order is rejected."
+              : "This campaign is full — all slots are taken. A slot may free up if an application is rejected, so check back later."
+          );
         }
         throw error;
       }
