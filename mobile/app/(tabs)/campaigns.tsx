@@ -9,7 +9,7 @@ import { CampaignImage } from "../../src/components/CampaignImage";
 import { StatusBadge } from "../../src/components/ui/StatusBadge";
 import { ProgressTracker } from "../../src/components/ProgressTracker";
 import { EmptyState } from "../../src/components/ui/EmptyState";
-import { useMyApplications } from "../../src/api/applications";
+import { useCampaignSlotSummary, useMyApplications } from "../../src/api/applications";
 import { colors, CAMPAIGN_TYPE_LABEL } from "../../src/lib/theme";
 import { formatCurrency, formatDate } from "../../src/lib/format";
 import type { Application, ApplicationStatus } from "../../src/lib/types";
@@ -108,9 +108,24 @@ function InfoBox({ icon, label, value, valueClass = "text-ink" }: {
 function ApplicationCard({ app }: { app: Application }) {
   const router = useRouter();
   const c = app.campaign;
+  const {
+    data: slotSummary,
+    error: slotSummaryError,
+  } = useCampaignSlotSummary(c?.campaign_type === "reimbursement" ? c.id : undefined, c?.slots ?? 0, c?.campaign_type);
   if (!c) return null;
   const inProgress = IN_PROGRESS.includes(app.status);
   const reimbursementTotal = c.reward_amount + c.cashback_percentage;
+  const slotActionMessage =
+    c.campaign_type !== "reimbursement"
+      ? null
+      : slotSummaryError
+        ? "Order availability unavailable — try again shortly"
+        : !slotSummary
+          ? "Checking order availability…"
+          : slotSummary.available <= 0
+            ? "Orders full — better luck next time"
+            : null;
+  const blockOrderAction = app.status === "selected" && slotActionMessage !== null;
 
   return (
     <Card className="mx-5 mb-4">
@@ -179,9 +194,14 @@ function ApplicationCard({ app }: { app: Application }) {
       )}
 
       <View className="mt-3 flex-row justify-end">
-        {(() => {
-          const action = nextAction(app);
-          return (
+        {blockOrderAction ? (
+          <View className="flex-row items-center gap-1.5 rounded-xl bg-red-50 px-4 py-2.5">
+            <Ionicons name="lock-closed-outline" size={14} color="#dc2626" />
+            <Text className="text-xs font-semibold text-red-700">{slotActionMessage}</Text>
+          </View>
+        ) : (() => {
+            const action = nextAction(app);
+            return (
             <Pressable
               onPress={() => router.push(`/application/${app.id}`)}
               className={`flex-row items-center gap-1.5 rounded-xl px-4 py-2.5 ${
@@ -193,8 +213,8 @@ function ApplicationCard({ app }: { app: Application }) {
               </Text>
               <Ionicons name="arrow-forward" size={14} color={action.dark ? "#fff" : colors.primary} />
             </Pressable>
-          );
-        })()}
+            );
+          })()}
       </View>
     </Card>
   );
