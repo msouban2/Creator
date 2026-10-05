@@ -145,9 +145,8 @@ export default function CampaignDetailsScreen() {
   );
   const myApp = myApps.find((a) => a.campaign_id === campaign.id);
   const alreadyApplied = !!myApp;
-  // A creator who already applied can still open their campaign progress.
-  const slotsFull = !alreadyApplied && currentSlotSummary != null && currentSlotSummary.available <= 0;
-  const ordersFullyApproved = !!currentSlotSummary && currentSlotSummary.approved >= currentSlotSummary.total;
+  const slotsFull = currentSlotSummary != null && currentSlotSummary.available <= 0;
+  const hideReimbursementActions = isReimbursement && (!currentSlotSummary || slotsFull);
   const slotBreakdown = currentSlotSummary
     ? (() => {
         const detailedReserved = currentSlotSummary.purchaseWindow + currentSlotSummary.awaitingReview + currentSlotSummary.reupload;
@@ -362,7 +361,7 @@ export default function CampaignDetailsScreen() {
                     ? "Order slot availability is temporarily unavailable. Apply is disabled until it reconnects."
                     : "Checking approved orders and temporary holds…"
                   : campaign.campaign_type === "reimbursement"
-                    ? ordersFullyApproved
+                      ? slotsFull
                       ? "Orders full — better luck next time"
                       : slotBreakdown
                   : currentSlotSummary.available <= 0
@@ -514,6 +513,7 @@ export default function CampaignDetailsScreen() {
         </View>
       </ScrollView>
 
+      {!hideReimbursementActions ? (
       <View className="absolute bottom-0 left-0 right-0 flex-row items-center gap-3 border-t border-primary-100 bg-white px-5 pb-8 pt-3">
         {campaign.product_url ? (
           <View className="flex-1">
@@ -538,6 +538,7 @@ export default function CampaignDetailsScreen() {
           />
         </View>
       </View>
+      ) : null}
 
       {/* Delivery address confirm sheet (barter/paid) */}
       <Modal visible={addressSheet} transparent animationType="slide" onRequestClose={() => setAddressSheet(false)}>

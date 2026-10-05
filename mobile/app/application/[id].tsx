@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import { Ionicons } from "@expo/vector-icons";
-import { useApplication, useSubmitPurchaseProof, useSubmitDraftVideo, useSubmitReelLink, useSubmitDeliveryPhoto, useSubmitOrderScreenshot, useStartOrderWindow } from "../../src/api/applications";
+import { useApplication, useCampaignSlotSummary, useSubmitPurchaseProof, useSubmitDraftVideo, useSubmitReelLink, useSubmitDeliveryPhoto, useSubmitOrderScreenshot, useStartOrderWindow } from "../../src/api/applications";
 import { SampleProofChip } from "../../src/components/SampleProof";
 import { SAMPLE_ORDER_SCREENSHOT } from "../../src/lib/samples";
 import { Card } from "../../src/components/ui/Card";
@@ -22,6 +22,12 @@ export default function ApplicationDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: app, isLoading } = useApplication(id!);
+  const appCampaign = app?.campaign;
+  const {
+    data: campaignSlotSummary,
+    isLoading: campaignSlotsLoading,
+    error: campaignSlotsError,
+  } = useCampaignSlotSummary(appCampaign?.id, appCampaign?.slots ?? 0, appCampaign?.campaign_type);
   const submitDraft = useSubmitDraftVideo();
   const submitReelLink = useSubmitReelLink();
   const submitDelivery = useSubmitDeliveryPhoto();
@@ -57,6 +63,13 @@ export default function ApplicationDetailScreen() {
   // Once the window has expired, the creator is in the 24h cooldown until the
   // retry timer ends; then they can restart the 15-min window.
   const retryReady = purchaseWindowExpired && !!retryCountdown?.ended;
+  const orderRetrySlotsFull =
+    app?.campaign?.campaign_type === "reimbursement" &&
+    !!campaignSlotSummary &&
+    campaignSlotSummary.available <= 0;
+  const orderRetryCapacityUnknown =
+    app?.campaign?.campaign_type === "reimbursement" &&
+    (campaignSlotsLoading || !!campaignSlotsError || !campaignSlotSummary);
 
   // Re-upload after rejection: creators get up to 5 free re-uploads (across the
   // order-screenshot and content stages); after that they must wait 24h between
@@ -175,6 +188,15 @@ export default function ApplicationDetailScreen() {
   // Restart the 15-min window after the 24h cooldown (stamps a fresh
   // order_started_at). The server rejects this until the cooldown has elapsed.
   const onRestartOrderWindow = async () => {
+    if (orderRetrySlotsFull || orderRetryCapacityUnknown) {
+      Alert.alert(
+        orderRetrySlotsFull ? "Orders full" : "Checking availability",
+        orderRetrySlotsFull
+          ? "All campaign slots are approved or reserved. You can't start another order right now."
+          : "We can't confirm an open campaign slot right now. Please try again shortly."
+      );
+      return;
+    }
     try {
       await startOrderWindow.mutateAsync(app.id);
       Alert.alert("You're back on!", "Your 15-minute order window has started. Buy the product and upload your screenshot now.");
@@ -526,6 +548,14 @@ export default function ApplicationDetailScreen() {
                     />
                   </View>
                 ) : null}
+              </View>
+            ) : orderRetrySlotsFull ? (
+              <View className="mt-4 rounded-2xl bg-red-50 p-3">
+                <Text className="text-sm font-semibold text-red-700">Orders full — all campaign slots are approved or reserved.</Text>
+              </View>
+            ) : orderRetryCapacityUnknown ? (
+              <View className="mt-4 rounded-2xl bg-amber-50 p-3">
+                <Text className="text-sm text-ink-soft">Checking slot availability… Please try again shortly.</Text>
               </View>
             ) : (
               <View className="mt-4">
